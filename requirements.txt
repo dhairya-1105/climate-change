@@ -1,0 +1,9 @@
+ibm-watsonx-ai
+langchain
+langchain-community
+langchain-ibm
+langgraph
+python-dotenv
+faiss-cpu
+ipython  
+typing-extensions
