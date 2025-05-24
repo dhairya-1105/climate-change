@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI, Request, HTTPException
 from base_rag import agentic_rag 
 app = FastAPI()
-API_KEY = os.environ.get("API_KEY")
+API_KEY = os.getenv("API_KEY")
 
 @app.post("/ask")
 async def ask_rag(request: Request):
