@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
+
 #watsonx.ai api keys
 project_id = os.getenv("IBM_PROJECT_ID")
 api_key = os.getenv("WATSONX_API_KEY")
@@ -444,8 +445,3 @@ nested_CRAG.add_edge("consolidate", END)
 agentic_rag = nested_CRAG.compile()
 
 display(Image(agentic_rag.get_graph(xray=True).draw_mermaid_png()))
-
-question = "Which David Fincher film that stars Edward Norton does not star Brad Pitt?"
-
-response = agentic_rag.invoke({"user_query": question, "steps": []})
-

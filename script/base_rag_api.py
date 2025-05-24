@@ -15,4 +15,5 @@ async def ask_rag(request: Request):
         return {"error": "user_query is required"}
     steps = body.get("steps", [])
     response = agentic_rag.invoke({"user_query": user_query, "steps": steps})
+    print(response)
     return {"result": response}

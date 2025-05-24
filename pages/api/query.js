@@ -1,8 +1,8 @@
 export default async function handler(req, res) {
-    const { prompt, type } = req.body;
+    const { prompt, type } = req.query;
     try {
         if (type === 1) {
-            const response = await fetch("https://your-fastapi-url.onrender.com/ask", {
+            const response = await fetch("https://climate-change-nlbh.onrender.com/ask", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -10,10 +10,11 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify({ user_query: "What is climate change?" }),
             });
-            const data = await response.json();
+            const data = await response.text();
+            console.log(data);
             return res.status(200).json(data);
         } else {
-            const response = await fetch("https://your-fastapi-url.onrender.com/ask", {
+            const response = await fetch("https://climate-change-nlbh.onrender.com/ask", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -21,8 +22,9 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify({ user_query: "What is climate change?" }),
             });
-            const data = await response.json();
-            res.status(200).json(data);
+            const data = await response.text();
+            console.log(data);
+            return res.status(200).json(data);
         }
     } catch (err) {
         console.error(err);
