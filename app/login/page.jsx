@@ -1,4 +1,4 @@
-"use client"; // for app directory or interaction (optional)
+"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -23,37 +23,50 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include", // Important for cookies
         body: JSON.stringify({ email, password, rememberMe }),
       });
 
       const data = await response.json();
+      
       if (data.valid === 0) {
+        // Success - store user data in localStorage
         localStorage.setItem("userEmail", email);
-        localStorage.setItem("Username",data.username);
+        localStorage.setItem("Username", data.username);
+        
+        // Redirect to home page
         router.push("/");
+        router.refresh(); // Refresh to update navbar state
       } else if (data.valid === 2) {
-        alert("Please Sign up first!");
-        router.push("/signup");
+        // User not found
+        setError("User not found. Please sign up first!");
+        setTimeout(() => {
+          router.push("/signup");
+        }, 2000);
       } else {
-        setError(data.error || "Invalid Email or Password");
+        // Invalid credentials or other error
+        setError(data.error || "Invalid email or password");
       }
     } catch (err) {
-      setError("An error occurred. Please try again later.");
       console.error("Login error:", err);
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white shadow-lg rounded-xl p-8 sm:p-10">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center bg-gradient-to-r from-indigo-600 via-purple-500 to-pink-600 text-transparent bg-clip-text">
+    <div className="min-h-screen flex items-center justify-center px-4 pt-20" style={{ backgroundColor: '#1A2420' }}>
+      <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{ 
+        backgroundColor: '#384D48',
+        borderColor: '#4A5D57'
+      }}>
+        <h2 className="text-2xl sm:text-3xl font-bold text-center" style={{ color: '#F5F5F5' }}>
           Welcome Back
         </h2>
 
         <form className="mt-6" onSubmit={handleSubmit}>
-          <label className="block mb-2 text-sm font-medium text-gray-700">
+          <label className="block mb-2 text-sm font-medium" style={{ color: '#E8E8E8' }}>
             Email Address
           </label>
           <input
@@ -61,11 +74,18 @@ export default function LoginPage() {
             placeholder="youremail@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md text-black focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 border-gray-300"
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
+            style={{ 
+              backgroundColor: '#4A5D57',
+              borderColor: '#6B7A73',
+              color: '#F5F5F5',
+              '--tw-ring-color': '#7FB069'
+            }}
             required
+            disabled={isLoading}
           />
 
-          <label className="block mt-4 mb-2 text-sm font-medium text-gray-700">
+          <label className="block mt-4 mb-2 text-sm font-medium" style={{ color: '#E8E8E8' }}>
             Password
           </label>
           <input
@@ -73,17 +93,26 @@ export default function LoginPage() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md text-black focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 border-gray-300"
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
+            style={{ 
+              backgroundColor: '#4A5D57',
+              borderColor: '#6B7A73',
+              color: '#F5F5F5',
+              '--tw-ring-color': '#7FB069'
+            }}
             required
+            disabled={isLoading}
           />
 
           <div className="flex items-center justify-between mt-4">
-            <label className="flex items-center text-sm font-medium text-gray-800">
+            <label className="flex items-center text-sm font-medium" style={{ color: '#D0D0D0' }}>
               <input
                 type="checkbox"
-                className="mr-2"
+                className="mr-2 rounded"
+                style={{ accentColor: '#7FB069' }}
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
+                disabled={isLoading}
               />
               Remember me on this device
             </label>
@@ -92,7 +121,10 @@ export default function LoginPage() {
           <div className="text-right mt-2">
             <a
               href="#"
-              className="text-sm text-blue-500 hover:underline font-medium"
+              className="text-sm hover:underline font-medium transition-colors duration-200"
+              style={{ color: '#9BC53D' }}
+              onMouseEnter={(e) => e.target.style.color = '#B8E356'}
+              onMouseLeave={(e) => e.target.style.color = '#9BC53D'}
             >
               Forgot password?
             </a>
@@ -100,20 +132,35 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full mt-6 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 active:scale-95 text-white font-semibold py-2 rounded-md transition-all duration-150 transform disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full mt-6 font-semibold py-3 rounded-md transition-all duration-200 transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+            style={{ 
+              backgroundColor: '#7FB069',
+              color: '#1A2B24',
+              boxShadow: '0 4px 12px rgba(127, 176, 105, 0.3)'
+            }}
+            onMouseEnter={(e) => !isLoading && (e.target.style.backgroundColor = '#9BC53D', e.target.style.boxShadow = '0 6px 16px rgba(155, 197, 61, 0.4)')}
+            onMouseLeave={(e) => !isLoading && (e.target.style.backgroundColor = '#7FB069', e.target.style.boxShadow = '0 4px 12px rgba(127, 176, 105, 0.3)')}
             disabled={isLoading}
           >
             {isLoading ? "Signing In..." : "Sign In"}
           </button>
 
           {error && (
-            <p className="mt-3 text-sm text-red-600 text-center">{error}</p>
+            <div className="mt-4 p-3 rounded-md" style={{ backgroundColor: '#4A2C2C', borderLeft: '4px solid #FF7B7B' }}>
+              <p className="text-sm" style={{ color: '#FF7B7B' }}>{error}</p>
+            </div>
           )}
         </form>
 
-        <div className="text-center mt-6 text-sm text-gray-600">
+        <div className="text-center mt-6 text-sm" style={{ color: '#C5C5C5' }}>
           Don't have an account?{" "}
-          <Link href="/signup" className="text-blue-500 font-medium hover:underline">
+          <Link 
+            href="/signup" 
+            className="font-medium hover:underline transition-colors duration-200"
+            style={{ color: '#9BC53D' }}
+            onMouseEnter={(e) => e.target.style.color = '#B8E356'}
+            onMouseLeave={(e) => e.target.style.color = '#9BC53D'}
+          >
             Sign up now
           </Link>
         </div>
