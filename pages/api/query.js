@@ -10,7 +10,11 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify({ user_query: "What is climate change?" }),
             });
-            const data = await response.text();
+            if (!response.ok) {
+                const errorText = await response.text();
+                return Response.json({ error: `FastAPI error: ${errorText}` }, { status: response.status });
+            }
+            const data = await response.json();
             console.log(data);
             return res.status(200).json(data);
         } else {
@@ -22,7 +26,11 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify({ user_query: "What is climate change?" }),
             });
-            const data = await response.text();
+            if (!response.ok) {
+                const errorText = await response.text();
+                return Response.json({ error: `FastAPI error: ${errorText}` }, { status: response.status });
+            }
+            const data = await response.json();
             console.log(data);
             return res.status(200).json(data);
         }

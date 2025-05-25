@@ -16,4 +16,5 @@ async def ask_rag(request: Request):
     steps = body.get("steps", [])
     response = agentic_rag.invoke({"user_query": user_query, "steps": steps})
     print(response)
+    print("Final response:", response.get("final_response"))
     return {"result": response}
