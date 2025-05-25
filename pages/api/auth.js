@@ -1,4 +1,3 @@
-// pages/api/auth.js
 import jwt from 'jsonwebtoken';
 import * as cookie from 'cookie';
 
