@@ -94,7 +94,7 @@ prompt = PromptTemplate(
     Perform query decomposition. Given a user question, break it down into distinct sub questions that \
     you need to answer in order to answer the original question. Response with \"The question needs no decomposition\" when no decomposition is needed.
     Generate questions that explicitly mention the subject by name, avoiding pronouns like 'these,' 'they,' 'he,' 'she,' 'it,' etc. Each question should clearly state the subject to ensure no ambiguity.
-
+    IMPORTANT :: DO NOT REPLY WITH ANYTHING ELSE JUST THE FORMAT DESCRIBED.
     Example 1:
     Question: Is Hamlet more common on IMDB than Comedy of Errors?
     Decompositions:
@@ -377,7 +377,7 @@ def CRAG_loop(state: dict) -> dict:
     questions = state["sub_questions"] #list of questions
     steps = state["steps"]
     user_query = state["user_query"]
-
+    print("CRAG")
     """-----------actions-----------"""
     sub_answers =[]
     steps.append("entering iterative CRAG for sub questions")

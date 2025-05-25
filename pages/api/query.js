@@ -12,7 +12,7 @@ export default async function handler(req, res) {
             });
             if (!response.ok) {
                 const errorText = await response.text();
-                return Response.json({ error: `FastAPI error: ${errorText}` }, { status: response.status });
+                return res.status(response.status).json({ error: `FastAPI error: ${errorText}` });
             }
             const data = await response.json();
             console.log(data);
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
             });
             if (!response.ok) {
                 const errorText = await response.text();
-                return Response.json({ error: `FastAPI error: ${errorText}` }, { status: response.status });
+                return res.status(response.status).json({ error: `FastAPI error: ${errorText}` });
             }
             const data = await response.json();
             console.log(data);
