@@ -1,4 +1,3 @@
-// pages/api/signup.js
 import dbConnect from "@/lib/dbConnect";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
