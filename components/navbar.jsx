@@ -111,6 +111,8 @@ export default function Navbar() {
         backgroundColor: '#384D48',
         borderColor: '#4A5D57'
       }}>
+
+
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="h-6 w-16 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>
           <div className="h-6 w-20 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>

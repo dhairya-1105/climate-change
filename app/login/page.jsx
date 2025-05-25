@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,15 +27,22 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
-      
+
       if (data.valid === 0) {
         // Success - store user data in localStorage
         localStorage.setItem("userEmail", email);
         localStorage.setItem("Username", data.username);
-        
+
         // Redirect to home page
-        router.push("/");
-        router.refresh(); // Refresh to update navbar state
+        setTimeout(() => {
+          router.push("/");
+          // wait a little before refreshing, to ensure navigation
+          setTimeout(() => {
+            router.refresh();
+          }, 100);  // small delay after push
+        }, 1500);
+
+
       } else if (data.valid === 2) {
         // User not found
         setError("User not found. Please sign up first!");
@@ -57,7 +63,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 pt-20" style={{ backgroundColor: '#1A2420' }}>
-      <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{ 
+      <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{
         backgroundColor: '#384D48',
         borderColor: '#4A5D57'
       }}>
@@ -75,7 +81,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
-            style={{ 
+            style={{
               backgroundColor: '#4A5D57',
               borderColor: '#6B7A73',
               color: '#F5F5F5',
@@ -94,7 +100,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
-            style={{ 
+            style={{
               backgroundColor: '#4A5D57',
               borderColor: '#6B7A73',
               color: '#F5F5F5',
@@ -133,7 +139,7 @@ export default function LoginPage() {
           <button
             type="submit"
             className="w-full mt-6 font-semibold py-3 rounded-md transition-all duration-200 transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-            style={{ 
+            style={{
               backgroundColor: '#7FB069',
               color: '#1A2B24',
               boxShadow: '0 4px 12px rgba(127, 176, 105, 0.3)'
@@ -154,8 +160,8 @@ export default function LoginPage() {
 
         <div className="text-center mt-6 text-sm" style={{ color: '#C5C5C5' }}>
           Don't have an account?{" "}
-          <Link 
-            href="/signup" 
+          <Link
+            href="/signup"
             className="font-medium hover:underline transition-colors duration-200"
             style={{ color: '#9BC53D' }}
             onMouseEnter={(e) => e.target.style.color = '#B8E356'}
