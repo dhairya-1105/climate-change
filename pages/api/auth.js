@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   const cookies = cookie.parse(req.headers.cookie || '');
   const token = cookies.accessToken;
-
+ // console.log("ok");
   if (!token) {
     return res.status(200).json({ isLoggedIn: false, error: 'No token found' });
   }

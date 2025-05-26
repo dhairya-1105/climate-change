@@ -27,40 +27,45 @@ export default function SignupPage() {
           "Content-Type": "application/json",
         },
         credentials: "include", // Important for cookies
-        body: JSON.stringify({ 
-          email, 
-          password, 
-          Username: username, 
-          rememberMe 
+        body: JSON.stringify({
+          email,
+          password,
+          Username: username,
+          rememberMe
         }),
       });
 
       const data = await response.json();
-      
+
       if (data.valid === 0) {
         // Success - store user data in localStorage
         localStorage.setItem("userEmail", email);
         localStorage.setItem("Username", username);
-        
+
         setSuccess("Account created successfully! Redirecting...");
-        
+
         // Redirect to home page after a short delay
         setTimeout(() => {
           router.push("/");
-          router.refresh(); // Refresh to update navbar state
+          // wait a little before refreshing, to ensure navigation
+          setTimeout(() => {
+            router.refresh();
+          }, 100);  // small delay after push
         }, 1500);
-        
+
+
+
       } else if (data.valid === 3) {
         // Email already exists
         setError("Email already registered. Please login instead!");
         setTimeout(() => {
           router.push("/login");
         }, 2000);
-        
+
       } else if (data.valid === 1) {
         // Username exists or validation error
         setError(data.error || "Username already exists. Please choose a different one.");
-        
+
       } else {
         // Other errors
         setError(data.error || "Registration failed. Please try again.");
@@ -75,14 +80,14 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 pt-20" style={{ backgroundColor: '#1A2420' }}>
-      <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{ 
+      <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{
         backgroundColor: '#384D48',
         borderColor: '#4A5D57'
       }}>
         <h2 className="text-2xl sm:text-3xl font-bold text-center" style={{ color: '#F5F5F5' }}>
           Create Your Account
         </h2>
-        
+
         <form className="mt-6" onSubmit={handleSubmit}>
           <label className="block mb-2 text-sm font-medium" style={{ color: '#E8E8E8' }}>
             Username
@@ -93,7 +98,7 @@ export default function SignupPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
-            style={{ 
+            style={{
               backgroundColor: '#4A5D57',
               borderColor: '#6B7A73',
               color: '#F5F5F5',
@@ -114,7 +119,7 @@ export default function SignupPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
-            style={{ 
+            style={{
               backgroundColor: '#4A5D57',
               borderColor: '#6B7A73',
               color: '#F5F5F5',
@@ -133,7 +138,7 @@ export default function SignupPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-opacity-70 transition-all duration-200"
-            style={{ 
+            style={{
               backgroundColor: '#4A5D57',
               borderColor: '#6B7A73',
               color: '#F5F5F5',
@@ -161,7 +166,7 @@ export default function SignupPage() {
           <button
             type="submit"
             className="w-full mt-6 font-semibold py-3 rounded-md transition-all duration-200 transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-            style={{ 
+            style={{
               backgroundColor: '#7FB069',
               color: '#1A2B24',
               boxShadow: '0 4px 12px rgba(127, 176, 105, 0.3)'
@@ -188,8 +193,8 @@ export default function SignupPage() {
 
         <div className="text-center mt-6 text-sm" style={{ color: '#C5C5C5' }}>
           Already have an account?{" "}
-          <Link 
-            href="/login" 
+          <Link
+            href="/login"
             className="font-medium hover:underline transition-colors duration-200"
             style={{ color: '#9BC53D' }}
             onMouseEnter={(e) => e.target.style.color = '#B8E356'}
@@ -198,7 +203,7 @@ export default function SignupPage() {
             Sign in
           </Link>
         </div>
-      </div>    
+      </div>
     </div>
   );
 }
