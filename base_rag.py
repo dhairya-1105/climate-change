@@ -50,14 +50,16 @@ llm = WatsonxLLM(
     apikey=credentials.get("apikey"),
     project_id=project_id,
     params = {  GenTextParamsMetaNames.DECODING_METHOD: "greedy",
-                GenTextParamsMetaNames.MAX_NEW_TOKENS: 200,
+                GenTextParamsMetaNames.MAX_NEW_TOKENS: 1000,
+                GenTextParamsMetaNames.TEMPERATURE: 0.7,
                 GenTextParamsMetaNames.MIN_NEW_TOKENS: 10})
 
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 
 prompt = PromptTemplate(
-    template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are an assistant for question-answering tasks.
+    template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are an assistant for environmental product questions, providing comprehensive answers about the environmental impacts of products, including their carbon footprint, water usage, waste generation, and other relevant factors. You should also suggest actionable steps to reduce environmental impact and provide citations for your information.
     {{Below is some context from different sources followed by a user's question. Please answer the question based on the context.
 
     Documents: {documents}}} <|eot_id|><|start_header_id|>user<|end_header_id|>
@@ -69,10 +71,37 @@ prompt = PromptTemplate(
     input_variables=["question", "documents"],
 )
 
+final_prompt = PromptTemplate(
+    template="""
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+You are an assistant for environmental product questions, providing comprehensive answers about the environmental impacts of products, including their carbon footprint, water usage, waste generation, and other relevant factors. You should also suggest actionable steps to reduce environmental impact and provide citations for your information.
+Given the following context and user question, answer in this JSON format:
+{{
+  "rating": Number (0-100, representing how confident you are in the accuracy and completeness of your answer based on available data),
+  "text": String (comprehensive answer addressing environmental impacts including carbon footprint, water usage, waste generation, etc.),
+  "citations": [{{"url": String}}] (list of source URLs that support your answer, minimum 1 source),
+  "recommendations": [{{"text": String}}] (2-3 actionable suggestions for reducing environmental impact),
+  "suggestedQuestions": [String] (3-4 related follow-up questions users might want to ask)
+}}
+
+Tips for each field:
+- rating: Consider data quality, source reliability, and how complete the information is
+- text: Structure the answer logically, use specific numbers/metrics when available
+- citations: Always link to authoritative sources like environmental databases or research papers
+- recommendations: Focus on practical, achievable actions for consumers
+- suggestedQuestions: Questions should explore related environmental aspects not covered in main answer
+
+Context: {documents}
+Question: {question}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+""",
+    input_variables=["question", "documents"],
+)
+
 #define rag chain
 rag_chain = prompt | llm | StrOutputParser()
-
-from langchain_core.output_parsers import JsonOutputParser
+# Final RAG chain with the new prompt
+final_rag_chain = final_prompt | llm | JsonOutputParser()
 
 prompt = PromptTemplate(
     template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -92,28 +121,44 @@ retrieval_grader = prompt | llm | JsonOutputParser()
 
 prompt = PromptTemplate(
     template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-    You are an assistant for question-answering tasks.
-    Perform query decomposition. Given a user question, break it down into distinct sub questions that \
-    you need to answer in order to answer the original question. Response with \"The question needs no decomposition\" when no decomposition is needed.
-    Generate questions that explicitly mention the subject by name, avoiding pronouns like 'these,' 'they,' 'he,' 'she,' 'it,' etc. Each question should clearly state the subject to ensure no ambiguity.
+You are a helpful assistant that breaks down user queries about environmental impacts of consumer products into clear sub-questions. 
+Your goal is to help the system understand what specific information (e.g., carbon footprint, water usage, recyclability, ethical sourcing) needs to be retrieved to answer the user’s question.
 
-    Example 1:
-    Question: Is Hamlet more common on IMDB than Comedy of Errors?
-    Decompositions:
-    How many listings of Hamlet are there on IMDB?
-    How many listing of Comedy of Errors is there on IMDB?
+- Focus on aspects such as life cycle assessment (LCA), sustainability, recyclability, emissions, and sourcing practices.
+- Always use full product names or descriptions — never use vague pronouns like "it", "they", "these", etc.
+- If the question includes a comparison, generate sub-questions for each product.
+- If the question is already atomic and needs no further breakdown, respond with: "The question needs no decomposition."
 
-    Example 2:
-    Question: What is the Capital city of Japan?
-    Decompositions:
-    The question needs no decomposition
+Examples:
 
-    <|eot_id|><|start_header_id|>user<|end_header_id|>
-    Question: {user_query} <|eot_id|><|start_header_id|>assistant<|end_header_id|>
-    Decompositions:"
-    """,
-    input_variables=["user_query"],
+Example 1:
+Question: What's the carbon footprint of a Nestle chocolate bar compared to an oat-based snack bar?
+Decompositions:
+What is the carbon footprint of a Nestle chocolate bar?
+What is the carbon footprint of an oat-based snack bar?
+
+Example 2:
+Question: Is Dove soap recyclable and ethically sourced?
+Decompositions:
+Is Dove soap recyclable?
+Is Dove soap ethically sourced?
+
+Example 3:
+Question: Show me the water usage of a T-shirt from H&M.
+Decompositions:
+What is the water usage of a T-shirt from H&M?
+
+Example 4:
+Question: What is the capital of Japan?
+Decompositions:
+The question needs no decomposition
+
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+Question: {user_query} <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+Decompositions:""",
+    input_variables=["user_query"]
 )
+
 
 #define query decomposition chain
 query_decompose = prompt | llm | StrOutputParser()
@@ -142,6 +187,8 @@ class GraphState(TypedDict):
     user_query: str
     sub_answers: List[str]
     sub_questions: List[str]
+    final_response: str
+    structured_output: dict
 
 def retrieve(state):
     """
@@ -159,20 +206,11 @@ def retrieve(state):
         state (dict): New key added to state, documents, that contains retrieved documents
     """
     print("---Retrieving Documents---")
-    """-----------inputs-----------"""
     question = state["question"]
     steps = state["steps"]
-
-    """-----------actions-----------"""
     steps.append("retrieve_documents")
     documents = retriever.invoke(question)
-
-    """-----------outputs-----------"""
-    return {
-        "documents": documents,
-        "question": question,
-        "steps": steps
-    }
+    return {"documents": documents, "question": question, "steps": steps}
 
 def grade_documents(state):
     """
@@ -186,33 +224,19 @@ def grade_documents(state):
         state (dict): Updates documents key with only filtered relevant documents
     """
     print("---Grading Retrieved Documents---")
-    """-----------inputs-----------"""
     documents = state["documents"]
     question = state["question"]
     steps = state["steps"]
-
-    """-----------actions-----------"""
     steps.append("grade_document_retrieval")
     relevant_docs = []
     search = "No"
-
     for d in documents:
-        score = retrieval_grader.invoke(
-            {"question": question, "document": d.page_content}
-        )
-        grade = score["score"]
-        if grade == "yes":
+        score = retrieval_grader.invoke({"question": question, "document": d.page_content})
+        if score["score"] == "yes":
             relevant_docs.append(d)
         else:
             search = "Yes"
-            continue
-    """-----------outputs-----------"""
-    return {
-        "documents": relevant_docs,
-        "question": question,
-        "search": search,
-        "steps": steps,
-    }
+    return {"documents": relevant_docs, "question": question, "search": search, "steps": steps}
 
 def decide_to_generate(state):
     """
@@ -235,36 +259,31 @@ def decide_to_generate(state):
         return "generate"
 
 def web_search(state):
-    """
-    Web search based on the re-phrased question.
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): Updates documents key with appended web results
-    """
     print("---Searching the Web---")
-    """-----------inputs-----------"""
     documents = state.get("documents", [])
     question = state["question"]
     steps = state["steps"]
-
-    """-----------actions-----------"""
     steps.append("web_search")
-    web_results = web_search_tool.invoke({"query": question})
+
+    # Add site constraints to bias the search toward trusted domains
+    trusted_sites = ["ecoinvent.org", "openlca.org", "unep.org", "sciencebasedtargets.org", "climate-data.org", "ipcc.ch", "world.openfoodfacts.org"]
+    constrained_query = question + " " + " OR ".join([f"site:{site}" for site in trusted_sites])
+
+    web_results = web_search_tool.invoke({"query": constrained_query})
+
     documents.extend(
         [
             Document(page_content=d["content"], metadata={"url": d["url"]})
             for d in web_results
         ]
     )
-    """-----------outputs-----------"""
+
     return {
         "documents": documents,
         "question": question,
         "steps": steps
     }
+
 
 def generate(state):
     """
@@ -277,50 +296,35 @@ def generate(state):
         state (dict): New key added to state, generation, that contains LLM generation
     """
     print("---Generating Response---")
-    """-----------inputs-----------"""
     documents = state["documents"]
     question = state["question"]
     steps = state["steps"]
-
-    """-----------actions-----------"""
     steps.append("generating sub-answer")
-    generation = rag_chain.invoke({"documents": documents, "question": question})
+    query_type = state.get("type", 2)
+    if query_type == 1:
+        generation = final_rag_chain.invoke({"documents": documents, "question": question})
+    else:
+        generation = rag_chain.invoke({"documents": documents, "question": question})
     print("Response to subquestion:", generation)
-
-    """-----------outputs-----------"""
-    return {
-        "documents": documents,
-        "question": question,
-        "generation": generation,
-        "steps": steps,
-    }
+    return {"documents": documents, "question": question, "generation": generation, "steps": steps}
 
 # intialize Graph
 CRAG = StateGraph(GraphState)
 
-# Define the nodes
-CRAG.add_node("retrieve", retrieve)  # retrieve
-CRAG.add_node("grade_documents", grade_documents) # grade documents
-CRAG.add_node("generate", generate)  # generatae
-CRAG.add_node("web_search", web_search)  # web search
-
-# Build graph
+# === Build CRAG Graph ===
+CRAG = StateGraph(GraphState)
+CRAG.add_node("retrieve", retrieve)
+CRAG.add_node("grade_documents", grade_documents)
+CRAG.add_node("generate", generate)
+CRAG.add_node("web_search", web_search)
 CRAG.set_entry_point("retrieve")
 CRAG.add_edge("retrieve", "grade_documents")
-CRAG.add_conditional_edges(
-    "grade_documents",  #at grade_documents node, invoke decide_to_generate function
-    decide_to_generate,
-    {
-        "search": "web_search", #if "search" is returned, invoke the "web_search" node
-        "generate": "generate", #if "generate" is returned, invoke the "generate" node
-    },
-)
+CRAG.add_conditional_edges("grade_documents", decide_to_generate, {"search": "web_search", "generate": "generate"})
 CRAG.add_edge("web_search", "generate")
 CRAG.add_edge("generate", END)
-
 CRAG_graph = CRAG.compile()
 
-display(Image(CRAG_graph.get_graph(xray=True).draw_mermaid_png()))
+# display(Image(CRAG_graph.get_graph(xray=True).draw_mermaid_png()))
 
 def transform_query(state: dict) -> dict:
     """
@@ -339,116 +343,69 @@ def transform_query(state: dict) -> dict:
     steps = state["steps"]
     print("User Query:", user_query)
     print("---Decomposing the QUERY---")
-
-    """-----------actions-----------"""
     steps.append("transform_query")
-    # Re-write question
     sub_questions = query_decompose.invoke({"user_query": user_query})
-
-    #parse sub questions as a list
-    list_of_questions = [question.strip() for question in sub_questions.strip().split('\n')]
-
+    list_of_questions = [q.strip() for q in sub_questions.strip().split('\n')]
     if list_of_questions[0] == 'The question needs no decomposition':
-        #no query decomposition required
-        #return question field as list
-        """-----------outputs-----------"""
-        return {
-            "sub_questions": [user_query],
-            "steps": steps,
-            "user_query": user_query
-        }
+        return {"sub_questions": [user_query], "steps": steps, "user_query": user_query}
     else:
-        print("Decomposed into the following queries:", list_of_questions)
-        return {
-            "sub_questions": list_of_questions,
-            "steps": steps,
-            "user_query": user_query
-        }
+        print("Decomposed into:", list_of_questions)
+        return {"sub_questions": list_of_questions, "steps": steps, "user_query": user_query}
 
 def CRAG_loop(state: dict) -> dict:
-    """
-    Determines whether to invoke CRAG graph call.
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        str: Binary decision for next node to call
-    """
-    """-----------inputs-----------"""
-    questions = state["sub_questions"] #list of questions
+    questions = state["sub_questions"]
     steps = state["steps"]
     user_query = state["user_query"]
-
-    """-----------actions-----------"""
-    sub_answers =[]
+    sub_answers = []
+    query_type = state.get("type", 2)
     steps.append("entering iterative CRAG for sub questions")
-
-    #loop through list of decomposed questions
     for q in questions:
         print("Handling subquestion:", q)
-        #enters beggining of CRAG graph -- retrieve node with the following state (question, step)
-        response = CRAG_graph.invoke({"question": q, "steps": steps})["generation"]
+        response = CRAG_graph.invoke({"question": q, "steps": steps, "type": query_type})["generation"]
         sub_answers.append(response)
-
-    """-----------outputs-----------"""
-    return {
-            "sub_answers": sub_answers,
-            "sub_questions": questions,
-            "user_query": user_query
-        }
+    return {"sub_answers": sub_answers, "sub_questions": questions, "user_query": user_query, "steps": steps}
 
 def consolidate(state: dict) -> dict:
-    """
-    Generate consolidated final answer to the original question, given 1. the original question and 2. the sub_questions with corresponding sub_answers
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): New key added to state, generation, that contains LLM generation
-    """
     print("---Consolidating Response---")
-    """-----------inputs-----------"""
     answers = state['sub_answers']
     questions = state['sub_questions']
     user_query = state['user_query']
-
-    """-----------actions-----------"""
     steps = state["steps"]
     steps.append("generating final answer")
-    qa_pairs = []
+    query_type = state.get("type", 2)
 
-    #create a list of the decomposed questions with their corresponding answers
-    #this intermediary information is used as context to answer the original user_query via in-context learning / RAG approach
-    for i in range(min(len(questions), len(answers))):
-        qa_pairs.append({questions[i]: answers[i].strip()})
-    print("multi hop context", qa_pairs)
-    final_response = rag_chain.invoke({"documents": qa_pairs, "question": user_query})
-    print("Final Response to Original Query:", final_response)
+    if query_type == 1:
+        qa_pairs = [{questions[i]: answers[i]["text"].strip()} for i in range(min(len(questions), len(answers)))]
+        final_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query})
+        print("Final Structured Response:", final_response)
+        return {
+            "user_query": user_query,
+            "final_response": final_response,
+            "steps": steps,
+            "intermediate_qa": qa_pairs,
+        }
+    else:
+        qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
+        final_response = rag_chain.invoke({"documents": qa_pairs, "question": user_query})
+        print("Final Response to Original Query:", final_response)
+        return {
+            "user_query": user_query,
+            "final_response": final_response,
+            "steps": steps,
+            "intermediate_qa": qa_pairs,
+        }
 
-    """-----------outputs-----------"""
-    return {
-        "user_query": user_query,
-        "final_response": final_response,
-        "steps": steps,
-        "intermediate_qa": qa_pairs,
-    }
-
+# === Assemble Nested Graph ===
 nested_CRAG = StateGraph(GraphState)
-nested_CRAG.add_node("transform_query", transform_query)  # retrieve
-nested_CRAG.add_node("CRAG_loop",CRAG_loop)
-nested_CRAG.add_node("consolidate",consolidate)
+nested_CRAG.add_node("transform_query", transform_query)
+nested_CRAG.add_node("CRAG_loop", CRAG_loop)
+nested_CRAG.add_node("consolidate", consolidate)
 nested_CRAG.set_entry_point("transform_query")
 nested_CRAG.add_edge("transform_query", "CRAG_loop")
 nested_CRAG.add_edge("CRAG_loop", "consolidate")
 nested_CRAG.add_edge("consolidate", END)
+# nested_CRAG.add_edge("format_final_output", END)
 
 agentic_rag = nested_CRAG.compile()
 
-display(Image(agentic_rag.get_graph(xray=True).draw_mermaid_png()))
-
-question = "Which David Fincher film that stars Edward Norton does not star Brad Pitt?"
-
-response = agentic_rag.invoke({"user_query": question, "steps": []})
-
+# display(Image(agentic_rag.get_graph(xray=True).draw_mermaid_png()))
