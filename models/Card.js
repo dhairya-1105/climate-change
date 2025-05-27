@@ -31,10 +31,6 @@ const CardSchema = new mongoose.Schema({
   citations: [LinkSchema], 
   recommendations: [LinkSchema], 
   suggestedQuestions: [String],
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  }
 }, {
   timestamps: true,
 });
