@@ -62,7 +62,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 pt-20" style={{ backgroundColor: '#1A2420' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 pt-20" style={{ backgroundColor: "rgba(26,36,32,0.45)" }}>
       <div className="max-w-md w-full shadow-2xl rounded-xl p-8 sm:p-10 border" style={{
         backgroundColor: '#384D48',
         borderColor: '#4A5D57'
