@@ -2,25 +2,38 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function Navbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname(); // Add this to detect route changes
 
-  // Check authentication status on component mount and when localStorage changes
+  // Check authentication status on component mount, route changes, and when localStorage changes
   useEffect(() => {
     checkAuthStatus();
-    
+  }, [pathname]); // Add pathname as dependency
+
+  useEffect(() => {
     // Listen for storage changes (login/logout from other tabs)
     const handleStorageChange = () => {
       checkAuthStatus();
     };
     
+    // Listen for focus events (when user comes back to tab)
+    const handleFocus = () => {
+      checkAuthStatus();
+    };
+    
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const checkAuthStatus = async () => {
@@ -111,8 +124,6 @@ export default function Navbar() {
         backgroundColor: '#384D48',
         borderColor: '#4A5D57'
       }}>
-
-
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="h-6 w-16 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>
           <div className="h-6 w-20 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>
@@ -143,7 +154,7 @@ export default function Navbar() {
           {isLoggedIn ? (
             <>
               {/* Welcome Message */}
-              <span className="text-sm font-medium hidden sm:inline" style={{ color: '#D0D0D0' }}>
+              <span className="text-base font-medium hidden sm:inline" style={{ color: '#D0D0D0' }}>
                 Welcome, {username}
               </span>
               
