@@ -2,7 +2,7 @@ export default async function handler(req, res) {
     if (req.method !== "POST") {
         return res.status(405).json({ message: "Method not allowed" });
     }
-    const { prompt, type } = req.body;
+    const { type, prompt, latitude, longitude} = req.body;
     try {
             const response = await fetch(`${process.env.FASTAPI_BASE_URL}/ask`, {
                 method: "POST",
@@ -10,7 +10,7 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json",
                     "x-api-key": process.env.FASTAPI_API_KEY,
                 },
-                body: JSON.stringify({user_query: prompt, type: Number(type)}),
+                body: JSON.stringify({user_query: prompt, type: Number(type), latitude, longitude}),
             });
             if (!response.ok) {
                 const errorText = await response.text();

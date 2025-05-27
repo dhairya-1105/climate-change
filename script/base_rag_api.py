@@ -20,6 +20,8 @@ async def ask_rag(request: Request):
             return {"error": "user_query is required"}
         steps = body.get("steps", [])
         type = body.get("type")  #type(1)- Card, type(2)- usual prompting
+        latitude = body.get("latitude")
+        longitude = body.get("longitude") 
         response = agentic_rag.invoke({"user_query": user_query, "steps": steps})
         print("RAG Response:", response)
         return {"result": response}
