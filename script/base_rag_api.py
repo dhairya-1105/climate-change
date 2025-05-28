@@ -22,7 +22,7 @@ async def ask_rag(request: Request):
         type = body.get("type")  #type(1)- Card, type(2)- usual prompting
         latitude = body.get("latitude")
         longitude = body.get("longitude") 
-        response = agentic_rag.invoke({"user_query": user_query, "steps": steps})
+        response = agentic_rag.invoke({"user_query": user_query, "steps": steps, "type" : type})
         print("RAG Response:", response)
         return {"result": response}
 
