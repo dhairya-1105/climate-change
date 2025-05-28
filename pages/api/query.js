@@ -10,7 +10,12 @@ export default async function handler(req, res) {
                     "Content-Type": "application/json",
                     "x-api-key": process.env.FASTAPI_API_KEY,
                 },
-                body: JSON.stringify({user_query: prompt, type: Number(type), latitude, longitude}),
+                body: JSON.stringify({
+                    user_query: prompt,
+                    type: Number(type),
+                    latitude,
+                    longitude
+                    }),
             });
             if (!response.ok) {
                 const errorText = await response.text();

@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/navbar";
 import Card from "@/components/card";
 
@@ -9,10 +10,11 @@ function useUserLocation() {
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      }),
+      (pos) =>
+        setLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        }),
       () => setLocation({ latitude: null, longitude: null })
     );
   }, []);
@@ -20,6 +22,31 @@ function useUserLocation() {
 }
 
 const NAVBAR_HEIGHT = 72; // px
+
+function renderSidebarResponse(result) {
+  if (!result) return "No response.";
+  let subAnswersSection = "";
+  if (Array.isArray(result.sub_answers) && result.sub_answers.length > 0) {
+    subAnswersSection = result.sub_answers
+      .map((ans, i) => `**Sub-answer ${i + 1}:**\n\n${ans}`)
+      .join('\n\n---\n\n');
+  }
+  let finalResponseSection = "";
+  if (result.final_response) {
+    finalResponseSection = `**Final Answer:**\n\n${result.final_response}`;
+  }
+  return [subAnswersSection, finalResponseSection].filter(Boolean).join('\n\n---\n\n');
+}
+
+function renderCardResponse(result) {
+  if (!result) return {};
+  let subAnswers = Array.isArray(result.sub_answers) ? result.sub_answers : [];
+  let finalResponse = result.final_response || "";
+  return {
+    subAnswers,
+    finalResponse,
+  };
+}
 
 export default function MainPage() {
   // THEME COLORS
@@ -34,6 +61,7 @@ export default function MainPage() {
   const [sideWidth, setSideWidth] = useState(380);
   const [isResizing, setIsResizing] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(true);
+  const [sideFullScreen, setSideFullScreen] = useState(false);
 
   // Main message state
   const [input, setInput] = useState("");
@@ -45,10 +73,19 @@ export default function MainPage() {
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
+  // Animated card output (type 1, not used in this version since you want direct fetch)
+  const [cardSubAnswers, setCardSubAnswers] = useState([]);
+  const [cardFinalAnswer, setCardFinalAnswer] = useState("");
+  const [cardIsTyping, setCardIsTyping] = useState(false);
+
   // Side message state
   const [sideInput, setSideInput] = useState("");
   const [sideLoading, setSideLoading] = useState(false);
   const [sideMessages, setSideMessages] = useState([]);
+  const [sideTypingIdx, setSideTypingIdx] = useState(-1);
+  const [sideTypingChunks, setSideTypingChunks] = useState([]);
+  const [sideTypingCurrentChunk, setSideTypingCurrentChunk] = useState("");
+  const sidebarBottomRef = useRef(null);
 
   // User & cards
   const [userEmail, setUserEmail] = useState(null);
@@ -58,7 +95,6 @@ export default function MainPage() {
 
   const location = useUserLocation();
 
-  // Fetch user auth info and cards
   useEffect(() => {
     async function fetchUserAndCards() {
       setCardsLoading(true);
@@ -68,17 +104,30 @@ export default function MainPage() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
         });
-        if (!authRes.ok) { setUserEmail(null); setUserCards([]); setCardsLoading(false); return; }
+        if (!authRes.ok) {
+          setUserEmail(null);
+          setUserCards([]);
+          setCardsLoading(false);
+          return;
+        }
         const authData = await authRes.json();
-        if (!authData.isLoggedIn) { setUserEmail(null); setUserCards([]); setCardsLoading(false); return; }
+        if (!authData.isLoggedIn) {
+          setUserEmail(null);
+          setUserCards([]);
+          setCardsLoading(false);
+          return;
+        }
         setUserEmail(authData.user.email);
         setUsername(authData.user.name || authData.user.email);
 
-        const cardsRes = await fetch(`/api/cards?email=${encodeURIComponent(authData.user.email)}`, {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        });
+        const cardsRes = await fetch(
+          `/api/cards?email=${encodeURIComponent(authData.user.email)}`,
+          {
+            method: "GET",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
         if (cardsRes.ok) {
           const cardsData = await cardsRes.json();
           setUserCards(Array.isArray(cardsData) ? cardsData.filter(Boolean) : []);
@@ -86,27 +135,27 @@ export default function MainPage() {
           setUserCards([]);
         }
       } catch {
-        setUserEmail(null); setUserCards([]);
+        setUserEmail(null);
+        setUserCards([]);
       }
       setCardsLoading(false);
     }
     fetchUserAndCards();
   }, []);
 
-  // Responsive side panel width
   useEffect(() => {
     function handleResize() {
+      if (sideFullScreen) return;
       const width = Math.max(320, Math.min(window.innerWidth * 0.4, 600));
       setSideWidth(width);
     }
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  // Panel resizing (for desktop)
+  }, [sideFullScreen]);
   useEffect(() => {
     const handleMouseMove = (e) => {
-      if (!isResizing || sideCollapsed) return;
+      if (!isResizing || sideCollapsed || sideFullScreen) return;
       let newWidth = window.innerWidth - e.clientX;
       newWidth = Math.max(320, Math.min(newWidth, 600));
       setSideWidth(newWidth);
@@ -120,8 +169,7 @@ export default function MainPage() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, sideCollapsed]);
-  // Keyboard shortcut for collapse
+  }, [isResizing, sideCollapsed, sideFullScreen]);
   useEffect(() => {
     const handleKey = (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === "q") {
@@ -137,7 +185,6 @@ export default function MainPage() {
     setSideCollapsed(true);
   }, []);
 
-  // Animation CSS (use only the transitions you had, plus slide-up and card appear)
   useEffect(() => {
     if (typeof window !== "undefined" && !document.getElementById("msgbox-fadeup-style")) {
       const style = document.createElement("style");
@@ -193,12 +240,18 @@ export default function MainPage() {
             padding: 0.5rem 2vw;
           }
         }
+        .blinking-cursor {
+          animation: blink 1s steps(1) infinite;
+        }
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
       `;
       document.head.appendChild(style);
     }
   }, []);
 
-  // Slide up content block after sending a message
   useEffect(() => {
     if (showCard) {
       setTimeout(() => setContentSlideUp(true), 80);
@@ -209,7 +262,12 @@ export default function MainPage() {
     }
   }, [showCard]);
 
-  // Side section open/close like original, not overlay
+  useEffect(() => {
+    if (sidebarBottomRef.current) {
+      sidebarBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [sideMessages, sideTypingChunks, sideTypingCurrentChunk, sideFullScreen]);
+
   const handleCollapse = () => {
     setSideCollapsed(true);
     setTimeout(() => setSideOpen(false), 240);
@@ -218,8 +276,9 @@ export default function MainPage() {
     setSideOpen(true);
     setTimeout(() => setSideCollapsed(false), 20);
   };
+  const handleFullScreen = () => setSideFullScreen(true);
+  const handleExitFullScreen = () => setSideFullScreen(false);
 
-  // Only translate/fade on send, not on focus
   const handleSendMain = async (e) => {
     e.preventDefault();
     if (!input.trim() || mainLoading) return;
@@ -233,9 +292,11 @@ export default function MainPage() {
 
     setTimeout(async () => {
       try {
-        const res = await fetch("/api/query.js", {
+        const response = await fetch('/api/query', {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             type: 1,
             prompt: input,
@@ -243,16 +304,19 @@ export default function MainPage() {
             longitude: location.longitude,
           }),
         });
-        const data = await res.json();
-
-        // If data contains a new card, save it to DB and update recent
+        if (!response.ok) {
+          const errorText = await response.text();
+          setMainCard({ error: `FastAPI error: ${errorText}` });
+          setShowCard(true);
+          return;
+        }
+        const data = await response.json();
         if (
           data &&
           data.card &&
           typeof data.card === "object" &&
           userEmail
         ) {
-          // Save card to DB
           await fetch("/api/createCard.js", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -261,33 +325,34 @@ export default function MainPage() {
               email: userEmail,
             }),
           });
-          // Add new card to top of recent cards state
           setUserCards((prev) => [data.card, ...prev].slice(0, 3));
         }
 
-        setMainCard(data.card || data); // If card field, use it, else fallback
+        setMainCard(data.card || data);
         setShowCard(true);
-      } catch {
+      } catch (err) {
         setMainCard({ error: "Failed to fetch response." });
         setShowCard(true);
       } finally {
         setMainLoading(false);
         setInput("");
       }
-    }, 800);
+    }, 400);
   };
 
-  // Side Send
+  // Structure sidebar output as array of chunks and add one-after-another
   const handleSendSide = async (e) => {
     e.preventDefault();
     if (!sideInput.trim() || sideLoading) return;
     setSideLoading(true);
-    setSideMessages((msgs) => [...msgs, { user: sideInput, response: null }]);
+    setSideMessages((msgs) => [...msgs, { user: sideInput, chunks: [] }]);
     const msgIdx = sideMessages.length;
     try {
-      const res = await fetch("/api/query.js", {
+      const response = await fetch('/api/query', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           type: 2,
           prompt: sideInput,
@@ -295,16 +360,89 @@ export default function MainPage() {
           longitude: location.longitude,
         }),
       });
-      const data = await res.json();
+      if (!response.ok) {
+        const errorText = await response.text();
+        setSideMessages((msgs) =>
+          msgs.map((msg, idx) =>
+            idx === msgIdx
+              ? { ...msg, chunks: [`FastAPI error: ${errorText}`] }
+              : msg
+          )
+        );
+        return;
+      }
+      const data = await response.json();
+      // Animate message like LLM chat, but add chunks one below the other
+      if (data.result && (data.result.type === 2 || data.result.type === "2")) {
+        let all = [];
+        if (Array.isArray(data.result.sub_answers)) {
+          all = [...data.result.sub_answers];
+        }
+        if (data.result.final_response) {
+          all.push(data.result.final_response);
+        }
+        let currentChunks = [];
+        let idx = 0;
+        function animateChunk() {
+          if (idx < all.length) {
+            setSideTypingIdx(msgIdx);
+            setSideTypingChunks(currentChunks);
+            setSideTypingCurrentChunk(""); // Start typing the next chunk
+            let full = all[idx];
+            let charIdx = 0;
+            function typeChar() {
+              setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
+              charIdx++;
+              if (charIdx < full.length) {
+                setTimeout(typeChar, 2); // FASTEST typing
+              } else {
+                currentChunks = [...currentChunks, full];
+                setSideMessages((prev) =>
+                  prev.map((msg, mi) =>
+                    mi === msgIdx
+                      ? {
+                          ...msg,
+                          chunks: [...currentChunks],
+                        }
+                      : msg
+                  )
+                );
+                idx++;
+                setTimeout(animateChunk, 30); // minimal delay before next
+              }
+            }
+            typeChar();
+          } else {
+            setSideTypingIdx(-1);
+            setSideTypingChunks([]);
+            setSideTypingCurrentChunk("");
+          }
+        }
+        animateChunk();
+      } else {
+        setSideMessages((msgs) =>
+          msgs.map((msg, idx) =>
+            idx === msgIdx
+              ? {
+                  ...msg,
+                  chunks: [
+                    data.result
+                      ? renderSidebarResponse(data.result)
+                      : data.sub_answers
+                      ? renderSidebarResponse(data)
+                      : data.error || "No response.",
+                  ],
+                }
+              : msg
+          )
+        );
+      }
+    } catch (err) {
       setSideMessages((msgs) =>
         msgs.map((msg, idx) =>
-          idx === msgIdx ? { ...msg, response: data.answer || data.error || "No response." } : msg
-        )
-      );
-    } catch {
-      setSideMessages((msgs) =>
-        msgs.map((msg, idx) =>
-          idx === msgIdx ? { ...msg, response: "Failed to fetch response." } : msg
+          idx === msgIdx
+            ? { ...msg, chunks: ["Failed to fetch response."] }
+            : msg
         )
       );
     } finally {
@@ -312,6 +450,52 @@ export default function MainPage() {
       setSideInput("");
     }
   };
+
+  const sidePanelStyle = sideFullScreen
+    ? {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: "100vh",
+        width: "100vw",
+        minWidth: 0,
+        maxWidth: "100vw",
+        background: cardBg,
+        zIndex: 100,
+        boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
+        display: "flex",
+        flexDirection: "column",
+        transition: "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
+        borderLeft: `1px solid ${cardAlt}`,
+        overflow: "hidden",
+      }
+    : {
+        position: "fixed",
+        top: 0,
+        right: 0,
+        height: "100vh",
+        width: sideWidth,
+        minWidth: 320,
+        maxWidth: 600,
+        background: cardBg,
+        boxShadow: !sideCollapsed
+          ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
+          : "none",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 30,
+        transform: sideCollapsed
+          ? `translateX(${sideWidth - 40}px)`
+          : "translateX(0)",
+        opacity: !sideCollapsed ? 1 : 0,
+        pointerEvents: !sideCollapsed ? "all" : "none",
+        transition:
+          "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
+        borderLeft: `1px solid ${cardAlt}`,
+      };
 
   return (
     <div
@@ -327,10 +511,12 @@ export default function MainPage() {
       {/* Main Content */}
       <main
         style={{
-          width: `calc(100vw - ${(sideOpen && !sideCollapsed) ? sideWidth : 0}px)`,
+          width: sideFullScreen
+            ? "0"
+            : `calc(100vw - ${(sideOpen && !sideCollapsed) ? sideWidth : 0}px)`,
           transition: "width 0.2s ease",
           minHeight: "100vh",
-          display: "flex",
+          display: sideFullScreen ? "none" : "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "flex-start",
@@ -423,7 +609,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.8"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-..."/>
               </svg>
             </button>
           </form>
@@ -438,15 +624,69 @@ export default function MainPage() {
                 marginTop: 22,
                 minHeight: 80,
                 zIndex: 2,
+                background: cardBg,
+                borderRadius: 14,
+                boxShadow: "0 2px 10px 0 #1a237e0e",
+                overflowWrap: "break-word",
+                wordBreak: "break-word",
+                padding: 0,
               }}
             >
               {mainLoading ? (
                 <div style={{ padding: "2rem", color: "#888", textAlign: "center" }}>Loading...</div>
-              ) : mainCard && typeof mainCard === "object" && mainCard !== null && mainCard.hasOwnProperty("rating") ? (
-                <Card card={mainCard} />
-              ) : mainCard && mainCard.error ? (
-                <div style={{ color: "#ff6666", background: cardBg, borderRadius: 8, padding: "1.2rem", textAlign: "center" }}>{mainCard.error}</div>
-              ) : null}
+              ) : (
+                (() => {
+                  // Card for type 1 queries and general fallback
+                  if (
+                    mainCard &&
+                    typeof mainCard === "object" &&
+                    (mainCard.result || mainCard.sub_answers || mainCard.final_response)
+                  ) {
+                    const result = mainCard.result || mainCard;
+                    return (
+                      <div style={{
+                        background: cardBg,
+                        borderRadius: 14,
+                        padding: "1.1rem 1.3rem",
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                        maxWidth: "100%",
+                        width: "100%"
+                      }}>
+                        <ReactMarkdown>
+                          {renderSidebarResponse(result)}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  }
+                  // Card for rating-based objects (old style)
+                  if (
+                    mainCard &&
+                    typeof mainCard === "object" &&
+                    mainCard !== null &&
+                    mainCard.hasOwnProperty("rating")
+                  ) {
+                    return <Card card={mainCard} />;
+                  }
+                  // Card error
+                  if (mainCard && mainCard.error) {
+                    return (
+                      <div
+                        style={{
+                          color: "#ff6666",
+                          background: cardBg,
+                          borderRadius: 8,
+                          padding: "1.2rem",
+                          textAlign: "center",
+                        }}
+                      >
+                        {mainCard.error}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()
+              )}
             </div>
           )}
 
@@ -508,78 +748,56 @@ export default function MainPage() {
         </div>
       </main>
       {/* Slide Button (expand/collapse) */}
-      <button
-        style={{
-          position: "fixed",
-          top: "50%",
-          right: sideCollapsed ? 14 : sideWidth + 14,
-          transform: "translateY(-50%)",
-          zIndex: 35,
-          background: mainBg,
-          border: "1.5px solid #384D48",
-          borderRadius: 9,
-          width: 40,
-          height: 40,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 2px 14px 0 rgba(60,64,67,0.10)",
-          cursor: "pointer",
-          transition: "right 0.24s ease, box-shadow 0.2s",
-          padding: 0,
-          opacity: 1,
-        }}
-        onClick={sideCollapsed ? handleExpand : handleCollapse}
-        aria-label={sideCollapsed ? "Show General Talk" : "Hide General Talk"}
-        title={sideCollapsed ? "Show General Talk" : "Hide General Talk"}
-      >
-        <svg width={26} height={26} viewBox="0 0 20 20" fill="none">
-          <path
-            d="M7 4l5 6-5 6"
-            stroke="#9BC53D"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{
-              transform: !sideCollapsed ? "rotate(0deg)" : "rotate(180deg)",
-              transformOrigin: "50% 50%",
-              transition: "transform 0.2s",
-            }}
-          />
-        </svg>
-      </button>
+      {!sideFullScreen && (
+        <button
+          style={{
+            position: "fixed",
+            top: "50%",
+            right: sideCollapsed ? 14 : sideWidth + 14,
+            transform: "translateY(-50%)",
+            zIndex: 35,
+            background: mainBg,
+            border: "1.5px solid #384D48",
+            borderRadius: 9,
+            width: 40,
+            height: 40,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 14px 0 rgba(60,64,67,0.10)",
+            cursor: "pointer",
+            transition: "right 0.24s ease, box-shadow 0.2s",
+            padding: 0,
+            opacity: 1,
+          }}
+          onClick={sideCollapsed ? handleExpand : handleCollapse}
+          aria-label={sideCollapsed ? "Show General Talk" : "Hide General Talk"}
+          title={sideCollapsed ? "Show General Talk" : "Hide General Talk"}
+        >
+          <svg width={26} height={26} viewBox="0 0 20 20" fill="none">
+            <path
+              d="M7 4l5 6-5 6"
+              stroke="#9BC53D"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                transform: !sideCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                transformOrigin: "50% 50%",
+                transition: "transform 0.2s",
+              }}
+            />
+          </svg>
+        </button>
+      )}
       {/* Side Section: General Talk */}
       <aside
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          height: "100vh",
-          width: sideWidth,
-          minWidth: 320,
-          maxWidth: 600,
-          background: cardBg,
-          boxShadow: (!sideCollapsed)
-            ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
-            : "none",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          zIndex: 30,
-          transform: sideCollapsed
-            ? `translateX(${sideWidth - 40}px)`
-            : "translateX(0)",
-          opacity: !sideCollapsed ? 1 : 0,
-          pointerEvents: !sideCollapsed ? "all" : "none",
-          transition:
-            "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
-          borderLeft: `1px solid ${cardAlt}`,
-        }}
+        style={sidePanelStyle}
         tabIndex={!sideCollapsed ? 0 : -1}
-        aria-hidden={sideCollapsed}
+        aria-hidden={sideCollapsed && !sideFullScreen}
       >
-        {/* Drag Resizer, disabled when collapsed */}
-        {!sideCollapsed && (
+        {/* Drag Resizer, disabled when collapsed or full screen */}
+        {!sideCollapsed && !sideFullScreen && (
           <div
             style={{
               width: 6,
@@ -594,6 +812,50 @@ export default function MainPage() {
             onMouseDown={() => !sideCollapsed && setIsResizing(true)}
             title="Resize"
           />
+        )}
+        {/* Exit full screen button */}
+        {sideFullScreen && (
+          <button
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 56,
+              background: "none",
+              border: "none",
+              fontSize: 22,
+              cursor: "pointer",
+              color: "#9BC53D",
+              zIndex: 200,
+              opacity: 0.85,
+            }}
+            onClick={handleExitFullScreen}
+            aria-label="Exit Full Screen"
+            title="Exit Full Screen"
+          >
+            ⬜
+          </button>
+        )}
+        {/* Full screen button */}
+        {!sideFullScreen && !sideCollapsed && (
+          <button
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 56,
+              background: "none",
+              border: "none",
+              fontSize: 22,
+              cursor: "pointer",
+              color: "#9BC53D",
+              zIndex: 32,
+              opacity: 0.85,
+            }}
+            onClick={handleFullScreen}
+            aria-label="Full Screen Chat"
+            title="Full Screen Chat"
+          >
+            ⬜
+          </button>
         )}
         {!sideCollapsed && (
           <button
@@ -638,14 +900,21 @@ export default function MainPage() {
                 fontSize: 15.5,
                 color: textMain,
                 background: cardAlt,
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                maxWidth: "100vw",
+                width: "100%",
               }}
             >
               <p style={{ margin: 0, color: textSub }}>
                 Welcome to the General Talk section! You can use this space to chat, ask questions, or discuss anything related to climate change.
               </p>
-              <div style={{ marginTop: 18 }}>
+              <div style={{ marginTop: 18, width: "100%" }}>
                 {sideMessages.map((msg, idx) => (
-                  <div key={idx} style={{ marginBottom: 14 }}>
+                  <div key={idx} style={{ marginBottom: 18, width: "100%" }}>
                     <div
                       style={{
                         fontSize: 13.5,
@@ -654,11 +923,37 @@ export default function MainPage() {
                         fontWeight: 500,
                         whiteSpace: "pre-line",
                         wordBreak: "break-word",
+                        maxWidth: "100%",
+                        width: "100%",
+                        overflowWrap: "break-word",
                       }}
                     >
                       {msg.user}
                     </div>
-                    {msg.response ? (
+                    {/* Each chunk is a separate answer bubble, always added below previous ones */}
+                    {msg.chunks && msg.chunks.map((chunk, chunkIdx) => (
+                      <div
+                        key={chunkIdx}
+                        style={{
+                          fontSize: 15.5,
+                          color: textMain,
+                          background: cardBg,
+                          padding: "0.7rem 1rem",
+                          borderRadius: 7,
+                          boxShadow: "0 1px 4px 0 #1a237e0e",
+                          marginBottom: 8,
+                          overflowWrap: "break-word",
+                          wordBreak: "break-word",
+                          maxWidth: "100%",
+                          width: "100%",
+                          whiteSpace: "pre-line",
+                        }}
+                      >
+                        <ReactMarkdown>{chunk}</ReactMarkdown>
+                      </div>
+                    ))}
+                    {/* Typing chunk bubble */}
+                    {sideTypingIdx === idx && sideTypingCurrentChunk && (
                       <div
                         style={{
                           fontSize: 15.5,
@@ -667,11 +962,20 @@ export default function MainPage() {
                           padding: "0.7rem 1rem",
                           borderRadius: 7,
                           boxShadow: "0 1px 4px 0 #1a237e0e",
+                          fontStyle: "italic",
+                          overflowWrap: "break-word",
+                          wordBreak: "break-word",
+                          maxWidth: "100%",
+                          width: "100%",
+                          marginBottom: 8,
+                          whiteSpace: "pre-line",
                         }}
                       >
-                        {msg.response}
+                        <ReactMarkdown>{sideTypingCurrentChunk}</ReactMarkdown>
+                        <span className="blinking-cursor" style={{ color: "#9BC53D" }}>|</span>
                       </div>
-                    ) : (
+                    )}
+                    {!msg.chunks?.length && sideTypingIdx !== idx && !sideLoading && (
                       <div
                         style={{
                           fontSize: 15,
@@ -684,6 +988,7 @@ export default function MainPage() {
                     )}
                   </div>
                 ))}
+                <div ref={sidebarBottomRef} />
               </div>
             </div>
             {/* Side panel query input and send button */}
@@ -696,6 +1001,7 @@ export default function MainPage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
+                maxWidth: "100vw",
               }}
               onSubmit={handleSendSide}
               autoComplete="off"
@@ -711,6 +1017,7 @@ export default function MainPage() {
                   outline: "none",
                   boxShadow: "0 0.5px 7px 0 rgba(60,64,67,0.07)",
                   color: textMain,
+                  maxWidth: "calc(100vw - 120px)",
                 }}
                 type="text"
                 placeholder="Type a message..."
@@ -733,7 +1040,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.8"/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 ..."/>
                 </svg>
               </button>
             </form>

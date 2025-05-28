@@ -71,7 +71,14 @@ prompt = PromptTemplate(
 
 final_prompt = PromptTemplate(
     template="""
+
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+According to the type value given to you perform the tasks according to question and context provided:
+type: {type}
+
+For type == 1:
+
 You are an assistant for environmental product questions, providing comprehensive answers about the environmental impacts of products, including their carbon footprint, water usage, waste generation, and other relevant factors. You should also suggest actionable steps to reduce environmental impact and provide citations for your information.
 Given the following context and user question, answer in context of these parameters:
 
@@ -88,17 +95,33 @@ Tips for each field:
 - recommendations: Focus on practical, achievable actions for consumers
 - suggestedQuestions: Questions should explore related environmental aspects not covered in main answer
 
+-------------------------------------------------------------------------------------
+
+For type == 2:
+
+Provide a detailed, text-only analysis on the subject of climate change or environmental impact. The topic can focus either on a specific product (such as its carbon footprint,
+sustainability, or environmental trade-offs) or cover a broader issue (such as rising global temperatures, ocean acidification, deforestation, or the effectiveness of renewable energy).
+Your analysis should include:
+
+A clear explanation of the key scientific or environmental principles involved.
+Discussion of current challenges and risks.
+The role of human activities or industries in shaping the issue.
+Possible solutions or innovations addressing the problem.
+Any notable controversies, trade-offs, or debates surrounding it.
+--------------------------------------------------------------------------------------
+IMPORTANT ::: GIVE THE LINKS ALWAYS IN MARKDOWN FORMAT, AND EVERYTHING ELSE TOO.
+DONOT ANSWER EMPTY QUESTIONS OR NOTES.
 Context: {documents}
 Question: {question}
 
 <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """,
-    input_variables=["question", "documents"],
+    input_variables=["question", "documents", "type"],
 )
 
-#define rag chain
+
 rag_chain = prompt | llm | StrOutputParser()
-# Final RAG chain with the new prompt
+
 final_rag_chain = final_prompt | llm 
 
 retrieval_prompt = PromptTemplate(
@@ -114,7 +137,6 @@ retrieval_prompt = PromptTemplate(
     input_variables=["question", "document"],
 )
 
-#define retieval grader chain
 retrieval_grader = retrieval_prompt | llm | JsonOutputParser()
 
 decomposer_prompt = PromptTemplate(
@@ -125,7 +147,7 @@ Your goal is to help the system understand what specific information (e.g., carb
 - Focus on aspects such as life cycle assessment (LCA), sustainability, recyclability, emissions, and sourcing practices.
 - Always use full product names or descriptions — never use vague pronouns like "it", "they", "these", etc.
 - If the question includes a comparison, generate sub-questions for each product.
-- If the question is already atomic and needs no further breakdown, respond with: "The question needs no decomposition."
+- YOU WILL NEVER GIVE EMPTY STRINGS IN THE LIST AND NO NOTES ONLY THE QUESTIONS MUST BE THERE IN THE LIST.
 
 Examples:
 
@@ -149,16 +171,15 @@ What is the water usage of a T-shirt from H&M?
 Example 4:
 Question: What is the capital of Japan?
 Decompositions:
-The question needs no decomposition
+What is the capital of Japan?
 
+Your list should not contain empty strings or any notes.
 <|eot_id|><|start_header_id|>user<|end_header_id|>
 Question: {user_query} <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 Decompositions:""",
     input_variables=["user_query"]
 )
 
-
-#define query decomposition chain
 query_decompose = decomposer_prompt | llm | StrOutputParser()
 
 from typing_extensions import TypedDict, List
@@ -264,7 +285,6 @@ def web_search(state):
     steps = state["steps"]
     steps.append("web_search")
 
-    # Add site constraints to bias the search toward trusted domains
     trusted_sites = ["ecoinvent.org", "openlca.org", "unep.org", "sciencebasedtargets.org", "climate-data.org", "ipcc.ch", "world.openfoodfacts.org"]
     constrained_query = question + " " + " OR ".join([f"site:{site}" for site in trusted_sites])
 
@@ -304,10 +324,8 @@ def generate(state):
     print("Response to subquestion:", generation)
     return {"documents": documents, "question": question, "generation": generation, "steps": steps}
 
-# intialize Graph
 CRAG = StateGraph(GraphState)
 
-# === Build CRAG Graph ===
 CRAG = StateGraph(GraphState)
 CRAG.add_node("retrieve", retrieve)
 CRAG.add_node("grade_documents", grade_documents)
@@ -319,8 +337,6 @@ CRAG.add_conditional_edges("grade_documents", decide_to_generate, {"search": "we
 CRAG.add_edge("web_search", "generate")
 CRAG.add_edge("generate", END)
 CRAG_graph = CRAG.compile()
-
-# display(Image(CRAG_graph.get_graph(xray=True).draw_mermaid_png()))
 
 json_structure_prompt = PromptTemplate(
     template="""
@@ -417,7 +433,7 @@ def consolidate(state: dict) -> dict:
 
     if query_type == 1:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 1})
         structured_response = json_consolidator.invoke({"text": raw_response})
         print("Final Structured Response:", structured_response)
         return {
@@ -428,7 +444,7 @@ def consolidate(state: dict) -> dict:
         }
     else:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 2})
         print("Final Response to Original Query:", raw_response)
         return {
             **state,
@@ -437,8 +453,6 @@ def consolidate(state: dict) -> dict:
             "intermediate_qa": qa_pairs,
         }
 
-
-# === Assemble Nested Graph ===
 nested_CRAG = StateGraph(GraphState)
 nested_CRAG.add_node("transform_query", transform_query)
 nested_CRAG.add_node("CRAG_loop", CRAG_loop)
@@ -447,8 +461,5 @@ nested_CRAG.set_entry_point("transform_query")
 nested_CRAG.add_edge("transform_query", "CRAG_loop")
 nested_CRAG.add_edge("CRAG_loop", "consolidate")
 nested_CRAG.add_edge("consolidate", END)
-# nested_CRAG.add_edge("format_final_output", END)
 
 agentic_rag = nested_CRAG.compile()
-
-# display(Image(agentic_rag.get_graph(xray=True).draw_mermaid_png()))
