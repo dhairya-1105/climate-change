@@ -121,12 +121,12 @@ export default function Navbar() {
   if (isLoading) {
     return (
       <nav className="fixed top-0 left-0 w-full z-50 py-3 px-6 border-b" style={{ 
-        backgroundColor: '#384D48',
-        borderColor: '#4A5D57'
+        backgroundColor: '#112D4E',
+        borderColor: '#3F72AF'
       }}>
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="h-6 w-16 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>
-          <div className="h-6 w-20 rounded animate-pulse" style={{ backgroundColor: '#4A5D57' }}></div>
+          <div className="h-6 w-16 rounded animate-pulse" style={{ backgroundColor: '#3F72AF' }}></div>
+          <div className="h-6 w-20 rounded animate-pulse" style={{ backgroundColor: '#3F72AF' }}></div>
         </div>
       </nav>
     );
@@ -134,27 +134,47 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 py-3 px-6 border-b shadow-lg" style={{ 
-      backgroundColor: '#384D48',
-      borderColor: '#4A5D57'
+      backgroundColor: '#112D4E',
+      borderColor: '#3F72AF'
     }}>
       <div className="max-w-7xl mx-auto flex justify-between items-center">
         {/* Logo/Brand Name */}
         <Link 
           href="/" 
           className="text-xl font-bold transition-colors duration-200 hover:no-underline"
-          style={{ color: '#F5F5F5' }}
-          onMouseEnter={(e) => e.target.style.color = '#9BC53D'}
-          onMouseLeave={(e) => e.target.style.color = '#F5F5F5'}
+          style={{ color: '#D9EAFD' }}
+          onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+          onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
         >
           NAME
         </Link>
 
         {/* Right Side Navigation */}
         <div className="flex items-center space-x-4">
+          {/* Tutorial Link - Always visible */}
+          <Link 
+            href="/tutorial" 
+            className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline text-sm"
+            style={{ 
+              color: '#D9EAFD',
+              backgroundColor: '#3F72AF'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = '#6DA9E4';
+              e.target.style.color = '#112D4E';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#3F72AF';
+              e.target.style.color = '#D9EAFD';
+            }}
+          >
+            Tutorial
+          </Link>
+
           {isLoggedIn ? (
             <>
               {/* Welcome Message */}
-              <span className="text-base font-medium hidden sm:inline" style={{ color: '#D0D0D0' }}>
+              <span className="text-base font-medium hidden sm:inline" style={{ color: '#DBE2EF' }}>
                 Welcome, {username}
               </span>
               
@@ -163,16 +183,16 @@ export default function Navbar() {
                 href="/dashboard" 
                 className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline text-sm"
                 style={{ 
-                  color: '#F5F5F5',
-                  backgroundColor: '#4A5D57'
+                  color: '#D9EAFD',
+                  backgroundColor: '#3F72AF'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#7FB069';
-                  e.target.style.color = '#1A2B24';
+                  e.target.style.backgroundColor = '#6DA9E4';
+                  e.target.style.color = '#112D4E';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#4A5D57';
-                  e.target.style.color = '#F5F5F5';
+                  e.target.style.backgroundColor = '#3F72AF';
+                  e.target.style.color = '#D9EAFD';
                 }}
               >
                 Dashboard
@@ -183,16 +203,18 @@ export default function Navbar() {
                 onClick={handleLogout}
                 className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:scale-105 text-sm"
                 style={{ 
-                  backgroundColor: '#7FB069',
-                  color: '#1A2B24',
+                  backgroundColor: '#3F72AF',
+                  color: '#D9EAFD',
                   border: 'none'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#9BC53D';
-                  e.target.style.boxShadow = '0 4px 12px rgba(155, 197, 61, 0.3)';
+                  e.target.style.backgroundColor = '#6DA9E4';
+                  e.target.style.color = '#112D4E';
+                  e.target.style.boxShadow = '0 4px 12px rgba(109, 169, 228, 0.3)';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#7FB069';
+                  e.target.style.backgroundColor = '#3F72AF';
+                  e.target.style.color = '#D9EAFD';
                   e.target.style.boxShadow = 'none';
                 }}
               >
@@ -205,15 +227,17 @@ export default function Navbar() {
               href="/login" 
               className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline hover:scale-105 text-sm"
               style={{ 
-                backgroundColor: '#7FB069',
-                color: '#1A2B24'
+                backgroundColor: '#3F72AF',
+                color: '#D9EAFD'
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#9BC53D';
-                e.target.style.boxShadow = '0 4px 12px rgba(155, 197, 61, 0.3)';
+                e.target.style.backgroundColor = '#6DA9E4';
+                e.target.style.color = '#112D4E';
+                e.target.style.boxShadow = '0 4px 12px rgba(109, 169, 228, 0.3)';
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#7FB069';
+                e.target.style.backgroundColor = '#3F72AF';
+                e.target.style.color = '#D9EAFD';
                 e.target.style.boxShadow = 'none';
               }}
             >

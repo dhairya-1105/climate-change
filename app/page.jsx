@@ -50,11 +50,21 @@ function renderCardResponse(result) {
 
 export default function MainPage() {
   // THEME COLORS
-  const mainBg = "#1A2420";
-  const cardBg = "#384D48";
-  const cardAlt = "#4A5D57";
-  const textMain = "#F5F5F5";
-  const textSub = "#D0D0D0";
+  const mainBg = "#D9EAFD";      // background
+  const cardBg = "#3F72AF";      // main card/box is now the "real" color
+  const cardAlt = "#3F72AF";     // sidebar/alt card
+  const inputBg = "#DBE2EF";     // textboxes
+  const textMain = "#112D4E";    // primary text
+  const textSub = "#6DA9E4";     // secondary text
+
+  // For heading animation
+  const [showUnderline, setShowUnderline] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowUnderline(true);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Side panel state
   const [sideOpen, setSideOpen] = useState(false);
@@ -73,7 +83,7 @@ export default function MainPage() {
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
-  // Animated card output (type 1, not used in this version since you want direct fetch)
+  // Animated card output (type 1, not used in this version)
   const [cardSubAnswers, setCardSubAnswers] = useState([]);
   const [cardFinalAnswer, setCardFinalAnswer] = useState("");
   const [cardIsTyping, setCardIsTyping] = useState(false);
@@ -462,7 +472,7 @@ export default function MainPage() {
         width: "100vw",
         minWidth: 0,
         maxWidth: "100vw",
-        background: cardBg,
+        background: cardAlt,
         zIndex: 100,
         boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
         display: "flex",
@@ -479,7 +489,7 @@ export default function MainPage() {
         width: sideWidth,
         minWidth: 320,
         maxWidth: 600,
-        background: cardBg,
+        background: cardAlt,
         boxShadow: !sideCollapsed
           ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
           : "none",
@@ -527,23 +537,45 @@ export default function MainPage() {
           paddingTop: `${NAVBAR_HEIGHT + 16}px`,
         }}
       >
-        {/* Quote Heading */}
-        <div
-          className={quoteFading ? "quote-fade-out" : "quote-fade-in"}
-          style={{
-            fontSize: "2.4rem",
-            fontWeight: 700,
-            color: textMain,
-            marginBottom: 48,
-            marginTop: 10,
-            letterSpacing: "0.01em",
-            textAlign: "center",
-            zIndex: 2,
-            width: "100%",
-            userSelect: "none",
-          }}
-        >
-          Beyond the Surface : The Real Cost
+        {/* Main Heading with animation (from tutorial page) */}
+        <div className="text-center mb-16" style={{ marginTop: 10 }}>
+          <h1
+            className="text-4xl md:text-5xl font-bold mb-6"
+            style={{
+              color: textMain,
+              fontSize: "2.4rem",
+              fontWeight: 700,
+              letterSpacing: "0.01em",
+              textAlign: "center",
+              userSelect: "none",
+            }}
+          >
+            Beyond the Surface: The{" "}
+            <span
+              style={{
+                color: "#3F72AF",
+                cursor: "pointer",
+                position: "relative",
+                display: "inline-block",
+              }}
+            >
+              real
+              <span
+                style={{
+                  position: "absolute",
+                  bottom: "-8px",
+                  left: "0",
+                  width: "100%",
+                  height: "3px",
+                  backgroundColor: "#3F72AF",
+                  transform: showUnderline ? "scaleX(1)" : "scaleX(0)",
+                  transformOrigin: "left",
+                  transition: "transform 0.8s ease",
+                }}
+              />
+            </span>{" "}
+            cost
+          </h1>
         </div>
 
         {/* All content below quote block */}
@@ -585,8 +617,11 @@ export default function MainPage() {
                 height: 42,
                 fontSize: 18,
                 outline: "none",
-                background: "transparent",
+                background: inputBg,
                 color: textMain,
+                borderRadius: 6,
+                padding: "0 1rem",
+                marginRight: 10,
               }}
               type="text"
               placeholder="Start your query..."
@@ -651,7 +686,8 @@ export default function MainPage() {
                         wordBreak: "break-word",
                         overflowWrap: "anywhere",
                         maxWidth: "100%",
-                        width: "100%"
+                        width: "100%",
+                        color: "#fff",
                       }}>
                         <ReactMarkdown>
                           {renderSidebarResponse(result)}
@@ -708,7 +744,7 @@ export default function MainPage() {
             {cardsLoading ? (
               <div style={{
                 background: cardBg,
-                color: textSub,
+                color: "#fff",
                 borderRadius: 10,
                 padding: "2rem",
                 textAlign: "center"
@@ -736,7 +772,7 @@ export default function MainPage() {
             ) : (
               <div style={{
                 background: cardBg,
-                color: textSub,
+                color: "#fff",
                 borderRadius: 10,
                 padding: "2rem",
                 textAlign: "center"
@@ -757,7 +793,7 @@ export default function MainPage() {
             transform: "translateY(-50%)",
             zIndex: 35,
             background: mainBg,
-            border: "1.5px solid #384D48",
+            border: `1.5px solid ${cardBg}`,
             borderRadius: 9,
             width: 40,
             height: 40,
@@ -796,13 +832,12 @@ export default function MainPage() {
         tabIndex={!sideCollapsed ? 0 : -1}
         aria-hidden={sideCollapsed && !sideFullScreen}
       >
-        {/* Drag Resizer, disabled when collapsed or full screen */}
         {!sideCollapsed && !sideFullScreen && (
           <div
             style={{
               width: 6,
               cursor: sideCollapsed ? "default" : "ew-resize",
-              background: sideCollapsed ? "transparent" : "#4A5D57",
+              background: sideCollapsed ? "transparent" : cardAlt,
               position: "absolute",
               left: -3,
               top: 0,
@@ -813,7 +848,6 @@ export default function MainPage() {
             title="Resize"
           />
         )}
-        {/* Exit full screen button */}
         {sideFullScreen && (
           <button
             style={{
@@ -835,7 +869,6 @@ export default function MainPage() {
             ⬜
           </button>
         )}
-        {/* Full screen button */}
         {!sideFullScreen && !sideCollapsed && (
           <button
             style={{
@@ -885,9 +918,9 @@ export default function MainPage() {
                 padding: "1.2rem 1.5rem 1rem 1.5rem",
                 fontWeight: 600,
                 fontSize: 19,
-                borderBottom: `1px solid ${cardAlt}`,
-                background: cardBg,
-                color: textMain,
+                borderBottom: `1px solid ${cardBg}`,
+                background: cardAlt,
+                color: "#D9EAFD",
               }}
             >
               General Talk
@@ -898,7 +931,7 @@ export default function MainPage() {
                 overflowY: "auto",
                 padding: "1.2rem",
                 fontSize: 15.5,
-                color: textMain,
+                color: "#D9EAFD",
                 background: cardAlt,
                 wordBreak: "break-word",
                 overflowWrap: "break-word",
@@ -909,7 +942,7 @@ export default function MainPage() {
                 width: "100%",
               }}
             >
-              <p style={{ margin: 0, color: textSub }}>
+              <p style={{ margin: 0, color: "#D9EAFD" }}>
                 Welcome to the General Talk section! You can use this space to chat, ask questions, or discuss anything related to climate change.
               </p>
               <div style={{ marginTop: 18, width: "100%" }}>
@@ -936,7 +969,7 @@ export default function MainPage() {
                         key={chunkIdx}
                         style={{
                           fontSize: 15.5,
-                          color: textMain,
+                          color: "#D9EAFD",
                           background: cardBg,
                           padding: "0.7rem 1rem",
                           borderRadius: 7,
@@ -947,6 +980,8 @@ export default function MainPage() {
                           maxWidth: "100%",
                           width: "100%",
                           whiteSpace: "pre-line",
+                          overflow: "hidden",
+                          boxSizing: "border-box",
                         }}
                       >
                         <ReactMarkdown>{chunk}</ReactMarkdown>
@@ -957,7 +992,7 @@ export default function MainPage() {
                       <div
                         style={{
                           fontSize: 15.5,
-                          color: textMain,
+                          color: "#D9EAFD",
                           background: cardBg,
                           padding: "0.7rem 1rem",
                           borderRadius: 7,
@@ -969,6 +1004,8 @@ export default function MainPage() {
                           width: "100%",
                           marginBottom: 8,
                           whiteSpace: "pre-line",
+                          overflow: "hidden",
+                          boxSizing: "border-box",
                         }}
                       >
                         <ReactMarkdown>{sideTypingCurrentChunk}</ReactMarkdown>
@@ -979,7 +1016,7 @@ export default function MainPage() {
                       <div
                         style={{
                           fontSize: 15,
-                          color: textSub,
+                          color: "#D9EAFD",
                           padding: "0.7rem 1rem",
                         }}
                       >
@@ -997,7 +1034,7 @@ export default function MainPage() {
                 width: "100%",
                 background: cardAlt,
                 padding: "1rem 1.2rem",
-                borderTop: `1px solid ${cardAlt}`,
+                borderTop: `1px solid ${cardBg}`,
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
@@ -1009,7 +1046,7 @@ export default function MainPage() {
               <input
                 style={{
                   border: "none",
-                  background: cardBg,
+                  background: inputBg,
                   borderRadius: 6,
                   fontSize: 16,
                   padding: "0.6rem 1rem",
