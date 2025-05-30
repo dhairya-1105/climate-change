@@ -31,7 +31,7 @@ async def ask_rag(request: Request):
         latitude = body.get("latitude")
         longitude = body.get("longitude")
         print(user_query)
-        response = agentic_rag.invoke({"user_query": user_query, "steps": steps, "type" : type, "latitude": latitude, "longitude": "longitude"})
+        response = agentic_rag.invoke({"user_query": user_query, "steps": steps, "type" : type, "latitude": latitude, "longitude": longitude})
         print("RAG Response:", response)
         return {"result": response}
 
