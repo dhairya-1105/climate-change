@@ -453,7 +453,7 @@ def consolidate(state: dict) -> dict:
 
     if query_type == 1:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "latitude": latitude, "longitude": longitude, "question": user_query})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 1, "latitude": latitude, "longitude": longitude})
         structured_response = json_consolidator.invoke({"text": raw_response})
         print("Final Structured Response:", structured_response)
         return {
@@ -464,7 +464,7 @@ def consolidate(state: dict) -> dict:
         }
     else:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 2, "latitude": latitude, "longitude": longitude})
         print("Final Response to Original Query:", raw_response)
         return {
             **state,
