@@ -109,14 +109,16 @@ The role of human activities or industries in shaping the issue.
 Possible solutions or innovations addressing the problem.
 Any notable controversies, trade-offs, or debates surrounding it.
 --------------------------------------------------------------------------------------
-IMPORTANT ::: GIVE THE LINKS ALWAYS IN MARKDOWN FORMAT, AND EVERYTHING ELSE TOO.
-DONOT ANSWER EMPTY QUESTIONS OR NOTES.
+IMPORTANT ::: GIVE THE LINKS ALWAYS IN MARKDOWN FORMAT, AND EVERYTHING ELSE TOO. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
+DO NOT ANSWER EMPTY QUESTIONS OR NOTES.
 Context: {documents}
 Question: {question}
+Latitude: {latitude}
+Longitude: {longitude}
 
 <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """,
-    input_variables=["question", "documents", "type"],
+    input_variables=["question", "documents", "type", "latitude", "longitude"],
 )
 
 
@@ -209,6 +211,8 @@ class GraphState(TypedDict):
     final_response: str
     structured_output: dict
     type: int
+    latitude: float
+    longitude: float
 
 def retrieve(state):
     """
@@ -306,7 +310,7 @@ def web_search(state):
 
 def generate(state):
     """
-    Generate answer
+    Generate answer with location context
 
     Args:
         state (dict): The current graph state
@@ -318,11 +322,25 @@ def generate(state):
     documents = state["documents"]
     question = state["question"]
     steps = state["steps"]
+    latitude = state.get("latitude", None)
+    longitude = state.get("longitude", None)
     steps.append("generating sub-answer")
     query_type = state.get("type", 2)
-    generation = rag_chain.invoke({"documents": documents, "question": question})
+    
+    generation = rag_chain.invoke({
+        "documents": documents, 
+        "question": question,
+        "latitude": latitude,
+        "longitude": longitude
+    })
+    
     print("Response to subquestion:", generation)
-    return {"documents": documents, "question": question, "generation": generation, "steps": steps}
+    return {
+        "documents": documents, 
+        "question": question, 
+        "generation": generation, 
+        "steps": steps
+    }
 
 CRAG = StateGraph(GraphState)
 
@@ -425,6 +443,8 @@ def consolidate(state: dict) -> dict:
     user_query = state['user_query']
     steps = state["steps"]
     query_type = state.get("type", 2)
+    latitude = state["latitude"]
+    longitude = state["longitude"]
 
     steps.append("generating final answer")
     print("Query type:", query_type)
@@ -433,7 +453,7 @@ def consolidate(state: dict) -> dict:
 
     if query_type == 1:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 1})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 1, "latitude": latitude, "longitude": longitude})
         structured_response = json_consolidator.invoke({"text": raw_response})
         print("Final Structured Response:", structured_response)
         return {
@@ -444,7 +464,7 @@ def consolidate(state: dict) -> dict:
         }
     else:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
-        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 2})
+        raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 2, "latitude": latitude, "longitude": longitude})
         print("Final Response to Original Query:", raw_response)
         return {
             **state,
