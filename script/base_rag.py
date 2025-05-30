@@ -84,13 +84,20 @@ Given the following context and user question, answer in context of these parame
 
   "rating": Number (0-100, representing your rating as an environmental expert, of the impacts of using that product),
   "text": String (comprehensive answer addressing environmental impacts including carbon footprint, water usage, waste generation, etc.),
-  "citations": ["url": String] (list of source URLs that support your answer, minimum 1 source),
+  "citations": [[unicef study](https://www.unicef.org/environment-and-climate-change)] (list of source URLs that support your answer, minimum 1 source),
   "recommendations": ["text": String] (2-3 actionable suggestions for reducing environmental impact),
   "suggestedQuestions": [String] (3-4 related follow-up questions users might want to ask)
 
+IMPORTANT::
 Tips for each field:
 - rating: Consider data quality, source reliability, and how complete the information is
-- text: Structure the answer logically, use specific numbers/metrics when available
+- text: Structure the answer logically, use specific numbers/metrics when available (DO NOT answer in more than 4-5 points for this part cover everything important such as:
+   1.The way the user could use it in a better way and how to use it mindfully.
+   2.What are the ways it affects the environment.
+   3.How can it be harmful for different people and how it affects the health.
+   4.try to make them a bit aware of the long term damage the product causes.
+   5.How can they try their best to use the harmful wastes produced from the product into something good or how can they minimise it if not make it useful.
+   )
 - citations: Always link to authoritative sources like environmental databases or research papers, use links instead of texts
 - recommendations: Focus on practical, achievable actions for consumers
 - suggestedQuestions: Questions should explore related environmental aspects not covered in main answer
@@ -109,7 +116,7 @@ The role of human activities or industries in shaping the issue.
 Possible solutions or innovations addressing the problem.
 Any notable controversies, trade-offs, or debates surrounding it.
 --------------------------------------------------------------------------------------
-IMPORTANT ::: GIVE THE LINKS ALWAYS IN MARKDOWN FORMAT, AND EVERYTHING ELSE TOO. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
+IMPORTANT ::: EVERYTHING MUST BE IN MARKDOWN FORMAT. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
 DO NOT ANSWER EMPTY QUESTIONS OR NOTES.
 Context: {documents}
 Question: {question}
@@ -143,6 +150,10 @@ retrieval_grader = retrieval_prompt | llm | JsonOutputParser()
 
 decomposer_prompt = PromptTemplate(
     template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+    type : {type}
+    when type == 1 then you will not decompose the question just return the same as one element in the list nothing else.
+---------------------------------------------------------------------------------------------------------------------------
+    when type == 2 follow the steps:
 You are a helpful assistant that breaks down user queries about environmental impacts of consumer products into clear sub-questions. 
 Your goal is to help the system understand what specific information (e.g., carbon footprint, water usage, recyclability, ethical sourcing) needs to be retrieved to answer the user’s question.
 
@@ -179,7 +190,7 @@ Your list should not contain empty strings or any notes.
 <|eot_id|><|start_header_id|>user<|end_header_id|>
 Question: {user_query} <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 Decompositions:""",
-    input_variables=["user_query"]
+    input_variables=["user_query", "type"]
 )
 
 query_decompose = decomposer_prompt | llm | StrOutputParser()
@@ -359,12 +370,13 @@ CRAG_graph = CRAG.compile()
 json_structure_prompt = PromptTemplate(
     template="""
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+IMPORTANT :: Everything MUST be in Markdown format:
 You are an assistant formatting environmental impact assessments.
 Given the following unstructured answer, return a JSON object with the following fields:
 {{
   "rating": Number (0-100, representing your rating as an environmental expert, of the impacts of using that product based on the unstructured answer),
   "text": String (comprehensive answer addressing environmental impacts including carbon footprint, water usage, waste generation, etc.),
-  "citations": [{{"url": String}}] (list of source URLs that support your answer, minimum 1 source),
+  "citations": [{{[unicef study](https://www.unicef.org/environment-and-climate-change)}}] (list of source URLs that support your answer, minimum 1 source),
   "recommendations": [{{"text": String}}] (2-3 actionable suggestions for reducing environmental impact),
   "suggestedQuestions": [String] (3-4 related follow-up questions users might want to ask)
 }}
@@ -374,13 +386,13 @@ Include all the information provided in the unstructured answer.
 Tips for each field:
 - rating: Consider data quality, source reliability, and how complete the information is
 - text: Structure the answer logically, use specific numbers/metrics when available
-- citations: Always link to authoritative sources like environmental databases or research papers, use normal text where URLs/links are not available
+- citations: Always link to authoritative sources like environmental databases or research papers, use normal text where URLs/links are not available, IMPORTANT :: GIVE IN MARKDOWN FORMAT ONLY (Example : An array of these: [unicef study](https://www.unicef.org/environment-and-climate-change))
 - recommendations: Focus on practical, achievable actions for consumers
 - suggestedQuestions: Questions should explore related environmental aspects not covered in main answer
 
 Unstructured Answer:
 {text}
-
+IMPORTANT :: DO NOT GIVE ANY OUTPUT OTHER THAN JSON OBJECT. NOT EVEN A NOTE NO-THING. 
 <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """,
     input_variables=["text"],
@@ -396,8 +408,8 @@ def transform_query(state: dict) -> dict:
     print("User Query:", user_query)
     print("---Decomposing the QUERY---")
     steps.append("transform_query")
-
-    sub_questions = query_decompose.invoke({"user_query": user_query})
+    type = state["type"]
+    sub_questions = query_decompose.invoke({"user_query": user_query, "type" : type})
     list_of_questions = [q.strip() for q in sub_questions.strip().split('\n')]
 
     if list_of_questions[0] == 'The question needs no decomposition':

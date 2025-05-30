@@ -9,7 +9,7 @@ API_KEY = os.getenv("API_KEY")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://climate-change-silk.vercel.app"],
+    allow_origins=["http://localhost:3000, https://climate-change-silk.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
