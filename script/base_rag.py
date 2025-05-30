@@ -115,6 +115,8 @@ Discussion of current challenges and risks.
 The role of human activities or industries in shaping the issue.
 Possible solutions or innovations addressing the problem.
 Any notable controversies, trade-offs, or debates surrounding it.
+
+Give links wherever you could of trusted sources in markdown format only : [unicef study](https://www.unicef.org/environment-and-climate-change)
 --------------------------------------------------------------------------------------
 IMPORTANT ::: EVERYTHING MUST BE IN MARKDOWN FORMAT. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
 DO NOT ANSWER EMPTY QUESTIONS OR NOTES.

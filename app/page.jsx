@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/navbar";
 import Card from "@/components/card";
 
-// User location hook
 function useUserLocation() {
   const [location, setLocation] = useState({ latitude: null, longitude: null });
   useEffect(() => {
@@ -23,41 +22,85 @@ function useUserLocation() {
 
 const NAVBAR_HEIGHT = 72; // px
 
-function renderSidebarResponse(result) {
-  if (!result) return "No response.";
-  let subAnswersSection = "";
-  if (Array.isArray(result.sub_answers) && result.sub_answers.length > 0) {
-    subAnswersSection = result.sub_answers
-      .map((ans, i) => `**Sub-answer ${i + 1}:**\n\n${ans}`)
-      .join('\n\n---\n\n');
+function parseFinalResponseJSON(final_response) {
+  if (!final_response || typeof final_response !== "string") return null;
+  let match = final_response.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
+  if (match) {
+    try {
+      return JSON.parse(match[1]);
+    } catch (e) {}
   }
-  let finalResponseSection = "";
-  if (result.final_response) {
-    finalResponseSection = `**Final Answer:**\n\n${result.final_response}`;
+  try {
+    let trimmed = final_response.trim().replace(/^```json|^```|```$/g, "");
+    return JSON.parse(trimmed);
+  } catch (e) {
+    return null;
   }
-  return [subAnswersSection, finalResponseSection].filter(Boolean).join('\n\n---\n\n');
 }
 
-function renderCardResponse(result) {
-  if (!result) return {};
-  let subAnswers = Array.isArray(result.sub_answers) ? result.sub_answers : [];
-  let finalResponse = result.final_response || "";
+function extractCardData(card, email = null) {
+  if (!card) return {};
+  let data = card.result || card;
+  let parsedFromFinal = null;
+  if (typeof data.final_response === "string" && data.final_response.trim().startsWith("```")) {
+    parsedFromFinal = parseFinalResponseJSON(data.final_response);
+  }
+  if (parsedFromFinal && typeof parsedFromFinal === "object") {
+    data = parsedFromFinal;
+  }
+
+  const rating = data.rating ?? null;
+  const text = data.text ?? "";
+  const citations = (data.citations ?? []).map((c) => {
+    if (typeof c === "object" && c.label && c.url) return { label: c.label, url: c.url };
+    const match = typeof c === "string" && c.match(/^\[(.*)\]\((.*)\)$/);
+    if (match) return { label: match[1], url: match[2] };
+    return { label: c?.toString() || "Source", url: "#" };
+  });
+  const recommendations = (data.recommendations ?? []).map((rec) => {
+    if (typeof rec === "object" && rec.label)
+      return { label: rec.label };
+    if (typeof rec === "object" && rec.text)
+      return { label: rec.text };
+    if (typeof rec === "string")
+      return { label: rec };
+    return { label: "Recommendation" };
+  });
+  const questions = data.suggestedQuestions ?? data.suggested_questions ?? [];
+  const sub_answers = data.sub_answers ?? [];
+  const final_response = data.final_response ?? "";
+
+  let mainText = text;
+  if (!mainText && final_response && typeof final_response === "string") mainText = final_response;
+  if (!mainText && Array.isArray(sub_answers) && sub_answers.length > 0)
+    mainText = sub_answers.join("\n\n---\n\n");
+
+  // Use createdAt if present, otherwise use current date/time
+  const createdAt =
+    data.createdAt ||
+    data.date ||
+    data.timestamp ||
+    new Date().toISOString();
+
   return {
-    subAnswers,
-    finalResponse,
+    rating,
+    text: mainText,
+    citations,
+    recommendations,
+    suggestedQuestions: questions,
+    createdAt,
+    email: email || data.email || undefined,
   };
 }
 
 export default function MainPage() {
-  // THEME COLORS
-  const mainBg = "#D9EAFD";      // background
-  const cardBg = "#3F72AF";      // main card/box is now the "real" color
-  const cardAlt = "#3F72AF";     // sidebar/alt card
-  const inputBg = "#DBE2EF";     // textboxes
-  const textMain = "#112D4E";    // primary text
-  const textSub = "#6DA9E4";     // secondary text
+  const mainBg = "#D9EAFD";
+  const cardBg = "#3F72AF";
+  const cardAlt = "#3F72AF";
+  const inputBg = "#DBE2EF";
+  const textMain = "#112D4E";
+  const textSub = "#6DA9E4";
 
-  // For heading animation
   const [showUnderline, setShowUnderline] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -66,14 +109,12 @@ export default function MainPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Side panel state
   const [sideOpen, setSideOpen] = useState(false);
   const [sideWidth, setSideWidth] = useState(380);
   const [isResizing, setIsResizing] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(true);
   const [sideFullScreen, setSideFullScreen] = useState(false);
 
-  // Main message state
   const [input, setInput] = useState("");
   const [mainLoading, setMainLoading] = useState(false);
   const [mainCard, setMainCard] = useState(null);
@@ -83,12 +124,6 @@ export default function MainPage() {
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
-  // Animated card output (type 1, not used in this version)
-  const [cardSubAnswers, setCardSubAnswers] = useState([]);
-  const [cardFinalAnswer, setCardFinalAnswer] = useState("");
-  const [cardIsTyping, setCardIsTyping] = useState(false);
-
-  // Side message state
   const [sideInput, setSideInput] = useState("");
   const [sideLoading, setSideLoading] = useState(false);
   const [sideMessages, setSideMessages] = useState([]);
@@ -97,7 +132,6 @@ export default function MainPage() {
   const [sideTypingCurrentChunk, setSideTypingCurrentChunk] = useState("");
   const sidebarBottomRef = useRef(null);
 
-  // User & cards
   const [userEmail, setUserEmail] = useState(null);
   const [username, setUsername] = useState("");
   const [userCards, setUserCards] = useState([]);
@@ -289,73 +323,24 @@ export default function MainPage() {
   const handleFullScreen = () => setSideFullScreen(true);
   const handleExitFullScreen = () => setSideFullScreen(false);
 
-  const handleSendMain = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || mainLoading) return;
-    setMainLoading(true);
-    setMainCard(null);
-    setShowCard(false);
-    setMsgBoxLifted(true);
-    setQuoteFading(true);
-    setContentSlideUp(false);
-    setCardAppear(false);
-
-    setTimeout(async () => {
-      try {
-        const response = await fetch('/api/query', {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            type: 1,
-            prompt: input,
-            latitude: location.latitude,
-            longitude: location.longitude,
-          }),
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          setMainCard({ error: `FastAPI error: ${errorText}` });
-          setShowCard(true);
-          return;
-        }
-        const data = await response.json();
-        if (
-          data &&
-          data.card &&
-          typeof data.card === "object" &&
-          userEmail
-        ) {
-          await fetch("/api/createCard.js", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...data.card,
-              email: userEmail,
-            }),
-          });
-          setUserCards((prev) => [data.card, ...prev].slice(0, 3));
-        }
-
-        setMainCard(data.card || data);
-        setShowCard(true);
-      } catch (err) {
-        setMainCard({ error: "Failed to fetch response." });
-        setShowCard(true);
-      } finally {
-        setMainLoading(false);
-        setInput("");
-      }
-    }, 400);
+  // Handle click on suggested question (from Card)
+  const handleSuggestedQuestionClick = (question) => {
+    setSideOpen(true);
+    setSideCollapsed(false);
+    setSideInput(question);
+    setTimeout(() => {
+      document.querySelector("#side-query-input")?.focus();
+      handleSendSide({ preventDefault: () => {} }, question);
+    }, 100);
   };
 
   // Structure sidebar output as array of chunks and add one-after-another
-  const handleSendSide = async (e) => {
-    e.preventDefault();
-    if (!sideInput.trim() || sideLoading) return;
+  const handleSendSide = async (e, overrideInput = null) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    const query = overrideInput !== null ? overrideInput : sideInput;
+    if (!query.trim() || sideLoading) return;
     setSideLoading(true);
-    setSideMessages((msgs) => [...msgs, { user: sideInput, chunks: [] }]);
+    setSideMessages((msgs) => [...msgs, { user: query, chunks: [] }]);
     const msgIdx = sideMessages.length;
     try {
       const response = await fetch('/api/query', {
@@ -365,7 +350,7 @@ export default function MainPage() {
         },
         body: JSON.stringify({
           type: 2,
-          prompt: sideInput,
+          prompt: query,
           latitude: location.latitude,
           longitude: location.longitude,
         }),
@@ -382,7 +367,6 @@ export default function MainPage() {
         return;
       }
       const data = await response.json();
-      // Animate message like LLM chat, but add chunks one below the other
       if (data.result && (data.result.type === 2 || data.result.type === "2")) {
         let all = [];
         if (Array.isArray(data.result.sub_answers)) {
@@ -397,14 +381,14 @@ export default function MainPage() {
           if (idx < all.length) {
             setSideTypingIdx(msgIdx);
             setSideTypingChunks(currentChunks);
-            setSideTypingCurrentChunk(""); // Start typing the next chunk
+            setSideTypingCurrentChunk("");
             let full = all[idx];
             let charIdx = 0;
             function typeChar() {
               setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
               charIdx++;
               if (charIdx < full.length) {
-                setTimeout(typeChar, 2); // FASTEST typing
+                setTimeout(typeChar, 2);
               } else {
                 currentChunks = [...currentChunks, full];
                 setSideMessages((prev) =>
@@ -418,7 +402,7 @@ export default function MainPage() {
                   )
                 );
                 idx++;
-                setTimeout(animateChunk, 30); // minimal delay before next
+                setTimeout(animateChunk, 30);
               }
             }
             typeChar();
@@ -461,6 +445,69 @@ export default function MainPage() {
     }
   };
 
+  // Main panel
+  const handleSendMain = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || mainLoading) return;
+    setMainLoading(true);
+    setMainCard(null);
+    setShowCard(false);
+    setMsgBoxLifted(true);
+    setQuoteFading(true);
+    setContentSlideUp(false);
+    setCardAppear(false);
+
+    setTimeout(async () => {
+      try {
+        const response = await fetch('/api/query', {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: 1,
+            prompt: input,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          }),
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          setMainCard({ error: `FastAPI error: ${errorText}` });
+          setShowCard(true);
+          return;
+        }
+        const data = await response.json();
+
+        // Save to DB using normalized card
+        if (
+          data &&
+          data.card &&
+          typeof data.card === "object" &&
+          userEmail
+        ) {
+          const cardForDb = extractCardData(data.card, userEmail);
+          await fetch("/api/createCard.js", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(cardForDb),
+          });
+          setUserCards((prev) => [cardForDb, ...prev].slice(0, 3));
+        }
+
+        setMainCard(data.card || data);
+        setShowCard(true);
+      } catch (err) {
+        setMainCard({ error: "Failed to fetch response." });
+        setShowCard(true);
+      } finally {
+        setMainLoading(false);
+        setInput("");
+      }
+    }, 400);
+  };
+
+  // --- UI BELOW ---
   const sidePanelStyle = sideFullScreen
     ? {
         position: "fixed",
@@ -507,13 +554,15 @@ export default function MainPage() {
         borderLeft: `1px solid ${cardAlt}`,
       };
 
+  // --- Main Render ---
   return (
     <div
       style={{
         display: "flex",
-        height: "100vh",
+        flexDirection: "column",
+        minHeight: "100vh",
         width: "100vw",
-        overflow: "hidden",
+        overflow: "auto",
         position: "relative",
         background: mainBg,
       }}
@@ -537,7 +586,6 @@ export default function MainPage() {
           paddingTop: `${NAVBAR_HEIGHT + 16}px`,
         }}
       >
-        {/* Main Heading with animation (from tutorial page) */}
         <div className="text-center mb-16" style={{ marginTop: 10 }}>
           <h1
             className="text-4xl md:text-5xl font-bold mb-6"
@@ -578,12 +626,12 @@ export default function MainPage() {
           </h1>
         </div>
 
-        {/* All content below quote block */}
         <div
           className={`slide-up-content${contentSlideUp ? " slide" : ""}`}
           style={{
             width: "100%",
-            maxWidth: 540,
+            maxWidth: "900px",
+            minWidth: "340px",
             margin: "0 auto",
             display: "flex",
             flexDirection: "column",
@@ -596,7 +644,7 @@ export default function MainPage() {
             className={msgBoxLifted ? "msgbox-lift" : "msgbox-rest"}
             style={{
               width: "100%",
-              maxWidth: 500,
+              maxWidth: 800,
               display: "flex",
               flexDirection: "row",
               alignItems: "center",
@@ -644,7 +692,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-..."/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
               </svg>
             </button>
           </form>
@@ -655,7 +703,8 @@ export default function MainPage() {
               className="main-card-appear"
               style={{
                 width: "100%",
-                maxWidth: 500,
+                maxWidth: "900px",
+                minWidth: "340px",
                 marginTop: 22,
                 minHeight: 80,
                 zIndex: 2,
@@ -671,40 +720,14 @@ export default function MainPage() {
                 <div style={{ padding: "2rem", color: "#888", textAlign: "center" }}>Loading...</div>
               ) : (
                 (() => {
-                  // Card for type 1 queries and general fallback
                   if (
                     mainCard &&
                     typeof mainCard === "object" &&
-                    (mainCard.result || mainCard.sub_answers || mainCard.final_response)
+                    (mainCard.result || mainCard.sub_answers || mainCard.final_response || mainCard.rating !== undefined)
                   ) {
-                    const result = mainCard.result || mainCard;
-                    return (
-                      <div style={{
-                        background: cardBg,
-                        borderRadius: 14,
-                        padding: "1.1rem 1.3rem",
-                        wordBreak: "break-word",
-                        overflowWrap: "anywhere",
-                        maxWidth: "100%",
-                        width: "100%",
-                        color: "#fff",
-                      }}>
-                        <ReactMarkdown>
-                          {renderSidebarResponse(result)}
-                        </ReactMarkdown>
-                      </div>
-                    );
+                    const cardData = extractCardData(mainCard);
+                    return <Card card={cardData} onSuggestedQuestionClick={handleSuggestedQuestionClick} />;
                   }
-                  // Card for rating-based objects (old style)
-                  if (
-                    mainCard &&
-                    typeof mainCard === "object" &&
-                    mainCard !== null &&
-                    mainCard.hasOwnProperty("rating")
-                  ) {
-                    return <Card card={mainCard} />;
-                  }
-                  // Card error
                   if (mainCard && mainCard.error) {
                     return (
                       <div
@@ -729,7 +752,8 @@ export default function MainPage() {
           {/* Recent cards section */}
           <div style={{
             width: "100%",
-            maxWidth: 540,
+            maxWidth: "900px",
+            minWidth: "340px",
             marginTop: 36,
           }}>
             <h2 style={{
@@ -765,7 +789,7 @@ export default function MainPage() {
                       overflow: "hidden",
                     }}
                   >
-                    <Card card={card} />
+                    <Card card={extractCardData(card)} onSuggestedQuestionClick={handleSuggestedQuestionClick} />
                   </div>
                 ) : null
               ))
@@ -982,9 +1006,24 @@ export default function MainPage() {
                           whiteSpace: "pre-line",
                           overflow: "hidden",
                           boxSizing: "border-box",
+                          display: "block"
                         }}
                       >
-                        <ReactMarkdown>{chunk}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            p: ({node, ...props}) => <p {...props} style={{margin: "0 0 10px 0", wordBreak: "break-word", overflowWrap: "break-word"}} />,
+                            ul: ({node, ...props}) => <ul {...props} style={{margin: "0 0 10px 1.2em", paddingLeft: "1.2em"}} />,
+                            ol: ({node, ...props}) => <ol {...props} style={{margin: "0 0 10px 1.2em", paddingLeft: "1.2em"}} />,
+                            li: ({node, ...props}) => <li {...props} style={{marginBottom: "0.2em", wordBreak: "break-word", overflowWrap: "break-word"}} />,
+                            a: ({node, ...props}) => <a {...props} style={{color: "#9BC53D", wordBreak: "break-all"}} target="_blank" rel="noopener noreferrer" />,
+                            table: ({node, ...props}) => <table {...props} style={{width:"100%", borderCollapse:"collapse", margin: "10px 0"}} />,
+                            th: ({node, ...props}) => <th {...props} style={{border:"1px solid #9BC53D", padding:"4px", background:"#2c3e50"}} />,
+                            td: ({node, ...props}) => <td {...props} style={{border:"1px solid #9BC53D", padding:"4px"}} />,
+                            code: ({node, ...props}) => <code {...props} style={{background:"#1e2b34", color:"#9BC53D", borderRadius:"4px", padding:"1px 4px"}} />
+                          }}
+                        >
+                          {chunk}
+                        </ReactMarkdown>
                       </div>
                     ))}
                     {/* Typing chunk bubble */}
@@ -1044,6 +1083,7 @@ export default function MainPage() {
               autoComplete="off"
             >
               <input
+                id="side-query-input"
                 style={{
                   border: "none",
                   background: inputBg,
@@ -1077,7 +1117,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 ..."/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
                 </svg>
               </button>
             </form>
