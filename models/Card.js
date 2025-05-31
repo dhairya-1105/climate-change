@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// Link schema for citations and recommendations
 const LinkSchema = new mongoose.Schema({
   label: {
     type: String,
@@ -11,12 +12,18 @@ const LinkSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+// Main Card schema
 const CardSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
+    index: true,
+  },
+  product: {
+    type: String,
+    required: true,
+    default: "Climate Change Analyzer", // Use your desired product name here
   },
   rating: {
     type: Number,

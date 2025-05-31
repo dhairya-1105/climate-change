@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 
 export default function Card({ card, onSuggestedQuestionClick }) {
@@ -79,6 +78,9 @@ export default function Card({ card, onSuggestedQuestionClick }) {
   const recommendations = parseRecommendations(card.recommendations);
   const questions = card.suggestedQuestions || card.suggested_questions || [];
 
+  // Product name
+  const productName = card.product || "Climate Change Analyzer";
+
   return (
     <div 
       className="w-full rounded-xl shadow-lg border p-6 mb-4 transition-all duration-200 hover:shadow-xl"
@@ -90,6 +92,12 @@ export default function Card({ card, onSuggestedQuestionClick }) {
         maxWidth: "100%"
       }}
     >
+      {/* Product Name */}
+      <div style={{
+        fontSize: 18.5, fontWeight: 700, color: "#9BC53D", marginBottom: 8, letterSpacing: ".01em"
+      }}>
+        {productName}
+      </div>
       {/* Header with Rating and Date */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center space-x-3">

@@ -82,6 +82,9 @@ function extractCardData(card, email = null) {
     data.timestamp ||
     new Date().toISOString();
 
+  // Add product field
+  const product = data.product || "Climate Change Analyzer";
+
   return {
     rating,
     text: mainText,
@@ -90,7 +93,19 @@ function extractCardData(card, email = null) {
     suggestedQuestions: questions,
     createdAt,
     email: email || data.email || undefined,
+    product,
   };
+}
+
+// Provide a dummy for renderSidebarResponse if not defined, to avoid ReferenceError
+function renderSidebarResponse(res) {
+  if (typeof res === "string") return res;
+  if (res && typeof res === "object") {
+    if (res.final_response) return res.final_response;
+    if (res.text) return res.text;
+    if (Array.isArray(res.sub_answers) && res.sub_answers.length > 0) return res.sub_answers.join("\n\n---\n\n");
+  }
+  return "";
 }
 
 export default function MainPage() {
@@ -164,8 +179,9 @@ export default function MainPage() {
         setUserEmail(authData.user.email);
         setUsername(authData.user.name || authData.user.email);
 
+        // fetch most recent cards, sorted by createdAt descending
         const cardsRes = await fetch(
-          `/api/cards?email=${encodeURIComponent(authData.user.email)}`,
+          `/api/cards?email=${encodeURIComponent(authData.user.email)}&sort=createdAt_desc`,
           {
             method: "GET",
             credentials: "include",
@@ -482,12 +498,10 @@ export default function MainPage() {
         // Save to DB using normalized card
         if (
           data &&
-          data.card &&
-          typeof data.card === "object" &&
           userEmail
         ) {
           const cardForDb = extractCardData(data.card, userEmail);
-          await fetch("/api/createCard.js", {
+          await fetch("/api/createCard", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cardForDb),
@@ -692,7 +706,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.863-.866z" />
               </svg>
             </button>
           </form>
@@ -1117,7 +1131,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.863-.866z" />
                 </svg>
               </button>
             </form>
