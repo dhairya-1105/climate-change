@@ -146,7 +146,7 @@ export default function Navbar() {
           onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
           onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
         >
-          NAME
+          EcoLens
         </Link>
 
         {/* Right Side Navigation */}

@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
     const { password, ...safeUser } = user;
-
+    console.log(safeUser.email);
     return res.status(200).json({ isLoggedIn: true, user: safeUser });
   } catch (error) {
     return res.status(200).json({ isLoggedIn: false, error: 'Invalid or expired token' });

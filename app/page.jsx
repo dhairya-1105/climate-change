@@ -20,7 +20,7 @@ function useUserLocation() {
   return location;
 }
 
-const NAVBAR_HEIGHT = 72; // px
+const NAVBAR_HEIGHT = 72;
 
 function parseFinalResponseJSON(final_response) {
   if (!final_response || typeof final_response !== "string") return null;
@@ -38,76 +38,89 @@ function parseFinalResponseJSON(final_response) {
   }
 }
 
-function extractCardData(card, email = null) {
+function extractCardData(card, email = null, productName = null, flag = true) {
   if (!card) return {};
   let data = card.result || card;
+  console.log(data);
+  // If final_response is a code block, parse it and merge into data
   let parsedFromFinal = null;
-  if (typeof data.final_response === "string" && data.final_response.trim().startsWith("```")) {
+  if (
+    typeof data.final_response === "string" &&
+    data.final_response.trim().startsWith("```")
+  ) {
     parsedFromFinal = parseFinalResponseJSON(data.final_response);
   }
   if (parsedFromFinal && typeof parsedFromFinal === "object") {
-    data = parsedFromFinal;
+    data = { ...data, ...parsedFromFinal };
   }
 
+  // Defensive: ensure arrays
   const rating = data.rating ?? null;
   const text = data.text ?? "";
-  const citations = (data.citations ?? []).map((c) => {
-    if (typeof c === "object" && c.label && c.url) return { label: c.label, url: c.url };
-    const match = typeof c === "string" && c.match(/^\[(.*)\]\((.*)\)$/);
-    if (match) return { label: match[1], url: match[2] };
-    return { label: c?.toString() || "Source", url: "#" };
-  });
-  const recommendations = (data.recommendations ?? []).map((rec) => {
-    if (typeof rec === "object" && rec.label)
-      return { label: rec.label };
-    if (typeof rec === "object" && rec.text)
-      return { label: rec.text };
-    if (typeof rec === "string")
-      return { label: rec };
-    return { label: "Recommendation" };
-  });
-  const questions = data.suggestedQuestions ?? data.suggested_questions ?? [];
-  const sub_answers = data.sub_answers ?? [];
+  const citationsArr = Array.isArray(data.citations) ? data.citations : [];
+  const recommendationsArr = Array.isArray(data.recommendations) ? data.recommendations : [];
+  const questionsArr = (
+    Array.isArray(data.suggestedQuestions)
+      ? data.suggestedQuestions
+      : Array.isArray(data.suggested_questions)
+        ? data.suggested_questions
+        : []
+  );
+  const sub_answers = Array.isArray(data.sub_answers) ? data.sub_answers : [];
   const final_response = data.final_response ?? "";
 
+  // Normalize citations to {label, url}
+  const citations = citationsArr.map((c) => {
+    if (typeof c === "object" && c.label && c.url)
+      return { label: c.label, url: c.url };
+    const match =
+      typeof c === "string" && c.match(/^\[(.*)\]\((.*)\)$/);
+    if (match) return { label: match[1], url: match[2] };
+    if (typeof c === "string" && c.startsWith("http"))
+      return { label: "Source", url: c };
+    return { label: c?.toString() || "Source", url: "#" };
+  });
+
+  // Normalize recommendations to {label}
+  const recommendations = recommendationsArr.map((rec) => {
+    if (typeof rec === "object" && rec.label) return { label: rec.label };
+    if (typeof rec === "object" && rec.text) return { label: rec.text };
+    if (typeof rec === "string") return { label: rec };
+    return { label: "Recommendation" };
+  });
+
+  // Main text construction
   let mainText = text;
-  if (!mainText && final_response && typeof final_response === "string") mainText = final_response;
-  if (!mainText && Array.isArray(sub_answers) && sub_answers.length > 0)
+  if (!mainText && final_response && typeof final_response === "string")
+    mainText = final_response;
+  if (!mainText && sub_answers.length > 0)
     mainText = sub_answers.join("\n\n---\n\n");
 
-  // Use createdAt if present, otherwise use current date/time
   const createdAt =
+    card.createdAt ||
     data.createdAt ||
     data.date ||
     data.timestamp ||
     new Date().toISOString();
 
-  // Add product field
-  const product = data.product || "Climate Change Analyzer";
+  // Optional: log only if debugging
+  console.log(productName, rating, text, citations, recommendations, questionsArr);
 
-  return {
+  const result = {
+    email: email || data.email || undefined,
+    product: productName || data.product || data.productName || undefined,
     rating,
     text: mainText,
     citations,
     recommendations,
-    suggestedQuestions: questions,
-    createdAt,
-    email: email || data.email || undefined,
-    product,
+    suggestedQuestions: questionsArr,
   };
-}
-
-// Provide a dummy for renderSidebarResponse if not defined, to avoid ReferenceError
-function renderSidebarResponse(res) {
-  if (typeof res === "string") return res;
-  if (res && typeof res === "object") {
-    if (res.final_response) return res.final_response;
-    if (res.text) return res.text;
-    if (Array.isArray(res.sub_answers) && res.sub_answers.length > 0) return res.sub_answers.join("\n\n---\n\n");
+  if (flag) {
+    result.createdAt = createdAt;
   }
-  return "";
+  if (card._id) result._id = card._id;
+  return result;
 }
-
 export default function MainPage() {
   const mainBg = "#D9EAFD";
   const cardBg = "#3F72AF";
@@ -118,9 +131,7 @@ export default function MainPage() {
 
   const [showUnderline, setShowUnderline] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowUnderline(true);
-    }, 200);
+    const timer = setTimeout(() => setShowUnderline(true), 200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -179,9 +190,8 @@ export default function MainPage() {
         setUserEmail(authData.user.email);
         setUsername(authData.user.name || authData.user.email);
 
-        // fetch most recent cards, sorted by createdAt descending
         const cardsRes = await fetch(
-          `/api/cards?email=${encodeURIComponent(authData.user.email)}&sort=createdAt_desc`,
+          `/api/cards?email=${encodeURIComponent(authData.user.email)}`,
           {
             method: "GET",
             credentials: "include",
@@ -246,7 +256,10 @@ export default function MainPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !document.getElementById("msgbox-fadeup-style")) {
+    if (
+      typeof window !== "undefined" &&
+      !document.getElementById("msgbox-fadeup-style")
+    ) {
       const style = document.createElement("style");
       style.id = "msgbox-fadeup-style";
       style.innerHTML = `
@@ -311,7 +324,6 @@ export default function MainPage() {
       document.head.appendChild(style);
     }
   }, []);
-
   useEffect(() => {
     if (showCard) {
       setTimeout(() => setContentSlideUp(true), 80);
@@ -321,7 +333,6 @@ export default function MainPage() {
       setCardAppear(false);
     }
   }, [showCard]);
-
   useEffect(() => {
     if (sidebarBottomRef.current) {
       sidebarBottomRef.current.scrollIntoView({ behavior: "smooth" });
@@ -339,18 +350,16 @@ export default function MainPage() {
   const handleFullScreen = () => setSideFullScreen(true);
   const handleExitFullScreen = () => setSideFullScreen(false);
 
-  // Handle click on suggested question (from Card)
   const handleSuggestedQuestionClick = (question) => {
     setSideOpen(true);
     setSideCollapsed(false);
     setSideInput(question);
     setTimeout(() => {
       document.querySelector("#side-query-input")?.focus();
-      handleSendSide({ preventDefault: () => {} }, question);
+      handleSendSide({ preventDefault: () => { } }, question);
     }, 100);
   };
 
-  // Structure sidebar output as array of chunks and add one-after-another
   const handleSendSide = async (e, overrideInput = null) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
     const query = overrideInput !== null ? overrideInput : sideInput;
@@ -411,9 +420,9 @@ export default function MainPage() {
                   prev.map((msg, mi) =>
                     mi === msgIdx
                       ? {
-                          ...msg,
-                          chunks: [...currentChunks],
-                        }
+                        ...msg,
+                        chunks: [...currentChunks],
+                      }
                       : msg
                   )
                 );
@@ -434,15 +443,15 @@ export default function MainPage() {
           msgs.map((msg, idx) =>
             idx === msgIdx
               ? {
-                  ...msg,
-                  chunks: [
-                    data.result
-                      ? renderSidebarResponse(data.result)
-                      : data.sub_answers
+                ...msg,
+                chunks: [
+                  data.result
+                    ? renderSidebarResponse(data.result)
+                    : data.sub_answers
                       ? renderSidebarResponse(data)
                       : data.error || "No response.",
-                  ],
-                }
+                ],
+              }
               : msg
           )
         );
@@ -461,7 +470,6 @@ export default function MainPage() {
     }
   };
 
-  // Main panel
   const handleSendMain = async (e) => {
     e.preventDefault();
     if (!input.trim() || mainLoading) return;
@@ -491,25 +499,32 @@ export default function MainPage() {
           const errorText = await response.text();
           setMainCard({ error: `FastAPI error: ${errorText}` });
           setShowCard(true);
+          setMainLoading(false);
+          setInput("");
           return;
         }
         const data = await response.json();
 
-        // Save to DB using normalized card
         if (
           data &&
+          data.result &&
+          typeof data.result === "object" &&
           userEmail
         ) {
-          const cardForDb = extractCardData(data.card, userEmail);
-          await fetch("/api/createCard", {
+          const cardForDb = extractCardData({ result: data.result }, userEmail, input, false);
+          const resp = await fetch("/api/createCard", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cardForDb),
           });
-          setUserCards((prev) => [cardForDb, ...prev].slice(0, 3));
+          if (resp.ok) {
+            const savedCard = await resp.json();
+            console.log(savedCard);
+            setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
+          }
         }
 
-        setMainCard(data.card || data);
+        setMainCard({ result: data.result });
         setShowCard(true);
       } catch (err) {
         setMainCard({ error: "Failed to fetch response." });
@@ -521,54 +536,53 @@ export default function MainPage() {
     }, 400);
   };
 
-  // --- UI BELOW ---
   const sidePanelStyle = sideFullScreen
     ? {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: "100vh",
-        width: "100vw",
-        minWidth: 0,
-        maxWidth: "100vw",
-        background: cardAlt,
-        zIndex: 100,
-        boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
-        display: "flex",
-        flexDirection: "column",
-        transition: "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
-        borderLeft: `1px solid ${cardAlt}`,
-        overflow: "hidden",
-      }
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: "100vh",
+      width: "100vw",
+      minWidth: 0,
+      maxWidth: "100vw",
+      background: cardAlt,
+      zIndex: 100,
+      boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
+      display: "flex",
+      flexDirection: "column",
+      transition:
+        "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
+      borderLeft: `1px solid ${cardAlt}`,
+      overflow: "hidden",
+    }
     : {
-        position: "fixed",
-        top: 0,
-        right: 0,
-        height: "100vh",
-        width: sideWidth,
-        minWidth: 320,
-        maxWidth: 600,
-        background: cardAlt,
-        boxShadow: !sideCollapsed
-          ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
-          : "none",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 30,
-        transform: sideCollapsed
-          ? `translateX(${sideWidth - 40}px)`
-          : "translateX(0)",
-        opacity: !sideCollapsed ? 1 : 0,
-        pointerEvents: !sideCollapsed ? "all" : "none",
-        transition:
-          "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
-        borderLeft: `1px solid ${cardAlt}`,
-      };
+      position: "fixed",
+      top: 0,
+      right: 0,
+      height: "100vh",
+      width: sideWidth,
+      minWidth: 320,
+      maxWidth: 600,
+      background: cardAlt,
+      boxShadow: !sideCollapsed
+        ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
+        : "none",
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: 30,
+      transform: sideCollapsed
+        ? `translateX(${sideWidth - 40}px)`
+        : "translateX(0)",
+      opacity: !sideCollapsed ? 1 : 0,
+      pointerEvents: !sideCollapsed ? "all" : "none",
+      transition:
+        "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
+      borderLeft: `1px solid ${cardAlt}`,
+    };
 
-  // --- Main Render ---
   return (
     <div
       style={{
@@ -581,7 +595,6 @@ export default function MainPage() {
         background: mainBg,
       }}
     >
-      {/* Main Content */}
       <main
         style={{
           width: sideFullScreen
@@ -639,7 +652,6 @@ export default function MainPage() {
             cost
           </h1>
         </div>
-
         <div
           className={`slide-up-content${contentSlideUp ? " slide" : ""}`}
           style={{
@@ -653,7 +665,6 @@ export default function MainPage() {
             opacity: 1,
           }}
         >
-          {/* Input bar with send button */}
           <form
             className={msgBoxLifted ? "msgbox-lift" : "msgbox-rest"}
             style={{
@@ -668,6 +679,7 @@ export default function MainPage() {
               padding: "0.5rem 1.2rem",
               zIndex: 6,
               color: textMain,
+              marginBottom: 18
             }}
             onSubmit={handleSendMain}
             autoComplete="off"
@@ -686,7 +698,7 @@ export default function MainPage() {
                 marginRight: 10,
               }}
               type="text"
-              placeholder="Start your query..."
+              placeholder="Enter product name for analysis..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={mainLoading}
@@ -706,12 +718,10 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.863-.866z" />
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z" />
               </svg>
             </button>
           </form>
-
-          {/* Card (response) */}
           {showCard && (
             <div
               className="main-card-appear"
@@ -737,9 +747,9 @@ export default function MainPage() {
                   if (
                     mainCard &&
                     typeof mainCard === "object" &&
-                    (mainCard.result || mainCard.sub_answers || mainCard.final_response || mainCard.rating !== undefined)
+                    mainCard.result
                   ) {
-                    const cardData = extractCardData(mainCard);
+                    const cardData = extractCardData(mainCard, null, input);
                     return <Card card={cardData} onSuggestedQuestionClick={handleSuggestedQuestionClick} />;
                   }
                   if (mainCard && mainCard.error) {
@@ -762,8 +772,6 @@ export default function MainPage() {
               )}
             </div>
           )}
-
-          {/* Recent cards section */}
           <div style={{
             width: "100%",
             maxWidth: "900px",
@@ -821,7 +829,6 @@ export default function MainPage() {
           </div>
         </div>
       </main>
-      {/* Slide Button (expand/collapse) */}
       {!sideFullScreen && (
         <button
           style={{
@@ -864,13 +871,12 @@ export default function MainPage() {
           </svg>
         </button>
       )}
-      {/* Side Section: General Talk */}
       <aside
         style={sidePanelStyle}
         tabIndex={!sideCollapsed ? 0 : -1}
         aria-hidden={sideCollapsed && !sideFullScreen}
       >
-        {!sideCollapsed && !sideFullScreen && (
+        {!sideFullScreen && !sideCollapsed && (
           <div
             style={{
               width: 6,
@@ -1001,7 +1007,6 @@ export default function MainPage() {
                     >
                       {msg.user}
                     </div>
-                    {/* Each chunk is a separate answer bubble, always added below previous ones */}
                     {msg.chunks && msg.chunks.map((chunk, chunkIdx) => (
                       <div
                         key={chunkIdx}
@@ -1025,22 +1030,21 @@ export default function MainPage() {
                       >
                         <ReactMarkdown
                           components={{
-                            p: ({node, ...props}) => <p {...props} style={{margin: "0 0 10px 0", wordBreak: "break-word", overflowWrap: "break-word"}} />,
-                            ul: ({node, ...props}) => <ul {...props} style={{margin: "0 0 10px 1.2em", paddingLeft: "1.2em"}} />,
-                            ol: ({node, ...props}) => <ol {...props} style={{margin: "0 0 10px 1.2em", paddingLeft: "1.2em"}} />,
-                            li: ({node, ...props}) => <li {...props} style={{marginBottom: "0.2em", wordBreak: "break-word", overflowWrap: "break-word"}} />,
-                            a: ({node, ...props}) => <a {...props} style={{color: "#9BC53D", wordBreak: "break-all"}} target="_blank" rel="noopener noreferrer" />,
-                            table: ({node, ...props}) => <table {...props} style={{width:"100%", borderCollapse:"collapse", margin: "10px 0"}} />,
-                            th: ({node, ...props}) => <th {...props} style={{border:"1px solid #9BC53D", padding:"4px", background:"#2c3e50"}} />,
-                            td: ({node, ...props}) => <td {...props} style={{border:"1px solid #9BC53D", padding:"4px"}} />,
-                            code: ({node, ...props}) => <code {...props} style={{background:"#1e2b34", color:"#9BC53D", borderRadius:"4px", padding:"1px 4px"}} />
+                            p: ({ node, ...props }) => <p {...props} style={{ margin: "0 0 10px 0", wordBreak: "break-word", overflowWrap: "break-word" }} />,
+                            ul: ({ node, ...props }) => <ul {...props} style={{ margin: "0 0 10px 1.2em", paddingLeft: "1.2em" }} />,
+                            ol: ({ node, ...props }) => <ol {...props} style={{ margin: "0 0 10px 1.2em", paddingLeft: "1.2em" }} />,
+                            li: ({ node, ...props }) => <li {...props} style={{ marginBottom: "0.2em", wordBreak: "break-word", overflowWrap: "break-word" }} />,
+                            a: ({ node, ...props }) => <a {...props} style={{ color: "#9BC53D", wordBreak: "break-all" }} target="_blank" rel="noopener noreferrer" />,
+                            table: ({ node, ...props }) => <table {...props} style={{ width: "100%", borderCollapse: "collapse", margin: "10px 0" }} />,
+                            th: ({ node, ...props }) => <th {...props} style={{ border: "1px solid #9BC53D", padding: "4px", background: "#2c3e50" }} />,
+                            td: ({ node, ...props }) => <td {...props} style={{ border: "1px solid #9BC53D", padding: "4px" }} />,
+                            code: ({ node, ...props }) => <code {...props} style={{ background: "#1e2b34", color: "#9BC53D", borderRadius: "4px", padding: "1px 4px" }} />
                           }}
                         >
                           {chunk}
                         </ReactMarkdown>
                       </div>
                     ))}
-                    {/* Typing chunk bubble */}
                     {sideTypingIdx === idx && sideTypingCurrentChunk && (
                       <div
                         style={{
@@ -1131,7 +1135,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.863-.866z" />
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z" />
                 </svg>
               </button>
             </form>

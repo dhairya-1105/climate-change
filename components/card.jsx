@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 
@@ -7,84 +6,62 @@ export default function Card({ card, onSuggestedQuestionClick }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
 
-  // Format date
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "N/A";
     return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   };
 
-  // Get rating color based on score
   const getRatingColor = (rating) => {
-    if (rating >= 80) return '#7FB069'; // Green
-    if (rating >= 60) return '#9BC53D'; // Light green
-    if (rating >= 40) return '#FFA500'; // Orange
-    return '#FF6B6B'; // Red
+    if (rating >= 80) return '#7FB069';
+    if (rating >= 60) return '#9BC53D';
+    if (rating >= 40) return '#FFA500';
+    return '#FF6B6B';
   };
 
-  // Truncate text for preview
   const truncateText = (text, maxLength = 200) => {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
   };
 
-  // Parse citations to { label, url }
   const parseCitations = (citations) => {
     if (!citations) return [];
     return citations.map((c) => {
-      if (typeof c === "object" && c.label && c.url) {
-        return { label: c.label, url: c.url };
-      }
+      if (typeof c === "object" && c.label && c.url) return { label: c.label, url: c.url };
       const match = typeof c === "string" && c.match(/^\[(.*)\]\((.*)\)$/);
-      if (match) {
-        return { label: match[1], url: match[2] };
-      }
+      if (match) return { label: match[1], url: match[2] };
       return { label: c?.toString() || "Source", url: "#" };
     });
   };
 
-  // Parse recommendations to { label }
   const parseRecommendations = (recs) => {
     if (!recs) return [];
     return recs.map((rec) => {
-      if (typeof rec === "object" && rec.label) {
-        return { label: rec.label };
-      }
-      if (typeof rec === "object" && rec.text) {
-        return { label: rec.text };
-      }
-      if (typeof rec === "string") {
-        return { label: rec };
-      }
+      if (typeof rec === "object" && rec.label) return { label: rec.label };
+      if (typeof rec === "object" && rec.text) return { label: rec.text };
+      if (typeof rec === "string") return { label: rec };
       return { label: "Recommendation" };
     });
   };
 
-  // Support for final_response and sub_answers
   let mainText = card.text || card.final_response || "";
-  if (!mainText && Array.isArray(card.sub_answers) && card.sub_answers.length > 0) {
+  if (!mainText && Array.isArray(card.sub_answers) && card.sub_answers.length > 0)
     mainText = card.sub_answers.join("\n\n---\n\n");
-  }
 
   const createdAt = card.createdAt || card.date || card.timestamp || "";
   const citations = parseCitations(card.citations);
   const recommendations = parseRecommendations(card.recommendations);
   const questions = card.suggestedQuestions || card.suggested_questions || [];
-
-  // Product name
-  const productName = card.product || "Climate Change Analyzer";
+  const productName = card.productName;
 
   return (
-    <div 
+    <div
       className="w-full rounded-xl shadow-lg border p-6 mb-4 transition-all duration-200 hover:shadow-xl"
-      style={{ 
+      style={{
         backgroundColor: '#384D48',
         borderColor: '#4A5D57',
         width: "100%",
@@ -92,19 +69,12 @@ export default function Card({ card, onSuggestedQuestionClick }) {
         maxWidth: "100%"
       }}
     >
-      {/* Product Name */}
-      <div style={{
-        fontSize: 18.5, fontWeight: 700, color: "#9BC53D", marginBottom: 8, letterSpacing: ".01em"
-      }}>
-        {productName}
-      </div>
-      {/* Header with Rating and Date */}
+      {/* Header with Rating and Date and Product Name */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center space-x-3">
-          {/* Rating Circle */}
-          <div 
+          <div
             className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-lg shadow-lg"
-            style={{ 
+            style={{
               backgroundColor: getRatingColor(card.rating),
               color: '#1A2B24'
             }}
@@ -118,6 +88,11 @@ export default function Card({ card, onSuggestedQuestionClick }) {
             <div className="text-xs" style={{ color: '#B0B0B0' }}>
               {formatDate(createdAt)}
             </div>
+            {productName && (
+              <div className="text-xs" style={{ color: '#9BC53D', fontWeight: 600, marginTop: 2 }}>
+                Product: {productName}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -127,7 +102,7 @@ export default function Card({ card, onSuggestedQuestionClick }) {
         <h3 className="text-lg font-semibold mb-3" style={{ color: '#F5F5F5' }}>
           Analysis
         </h3>
-        <div 
+        <div
           className="leading-relaxed"
           style={{ color: '#E8E8E8' }}
         >
@@ -159,7 +134,7 @@ export default function Card({ card, onSuggestedQuestionClick }) {
               <div
                 key={index}
                 className="flex items-center p-3 rounded-lg border transition-all duration-200 hover:scale-[1.02] group"
-                style={{ 
+                style={{
                   backgroundColor: '#4A5D57',
                   borderColor: '#6B7A73',
                   width: "100%",
@@ -167,13 +142,13 @@ export default function Card({ card, onSuggestedQuestionClick }) {
                 }}
               >
                 <div className="flex-1 min-w-0">
-                  <div 
+                  <div
                     className="font-medium group-hover:underline"
                     style={{ color: '#F5F5F5' }}
                   >
                     {citation.label}
                   </div>
-                  <div 
+                  <div
                     className="text-sm mt-1 truncate"
                     style={{ color: '#B0B0B0' }}
                   >
@@ -187,9 +162,9 @@ export default function Card({ card, onSuggestedQuestionClick }) {
                     </a>
                   </div>
                 </div>
-                <div 
+                <div
                   className="ml-3 text-xs px-2 py-1 rounded rotate-[-90deg]"
-                  style={{ 
+                  style={{
                     backgroundColor: '#7FB069',
                     color: '#1A2B24',
                     writingMode: "vertical-rl",
@@ -216,23 +191,23 @@ export default function Card({ card, onSuggestedQuestionClick }) {
               <div
                 key={index}
                 className="flex items-center p-3 rounded-lg border transition-all duration-200 hover:scale-[1.02] group"
-                style={{ 
+                style={{
                   backgroundColor: '#4A5D57',
                   borderColor: '#6B7A73',
                   width: "100%"
                 }}
               >
                 <div className="flex-1">
-                  <div 
+                  <div
                     className="font-medium group-hover:underline"
                     style={{ color: '#F5F5F5' }}
                   >
                     {rec.label}
                   </div>
                 </div>
-                <div 
+                <div
                   className="ml-3 text-xs px-2 py-1 rounded"
-                  style={{ 
+                  style={{
                     backgroundColor: '#9BC53D',
                     color: '#1A2B24'
                   }}
@@ -267,7 +242,7 @@ export default function Card({ card, onSuggestedQuestionClick }) {
                   }
                 }}
               >
-                <div 
+                <div
                   className="font-medium group-hover:underline"
                   style={{ color: '#F5F5F5' }}
                 >
@@ -275,7 +250,6 @@ export default function Card({ card, onSuggestedQuestionClick }) {
                 </div>
               </button>
             ))}
-            
             {questions.length > 3 && (
               <button
                 onClick={() => setShowAllQuestions(!showAllQuestions)}

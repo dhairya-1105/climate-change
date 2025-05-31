@@ -1,12 +1,20 @@
 import mongoose from "mongoose";
 
-// Link schema for citations and recommendations
-const LinkSchema = new mongoose.Schema({
+// Citation schema (for sources with label and url)
+const CitationSchema = new mongoose.Schema({
   label: {
     type: String,
     required: true,
   },
   url: {
+    type: String,
+    required: false,
+  }
+}, { _id: false });
+
+// Recommendation schema (now an object with just a label)
+const RecommendationSchema = new mongoose.Schema({
+  label: {
     type: String,
     required: true,
   }
@@ -35,9 +43,9 @@ const CardSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  citations: [LinkSchema], 
-  recommendations: [LinkSchema], 
-  suggestedQuestions: [String],
+  citations: { type: [CitationSchema], default: [] }, // Array of { label, url }
+  recommendations: { type: [RecommendationSchema], default: [] }, // Array of { label }
+  suggestedQuestions: { type: [String], default: [] },
 }, {
   timestamps: true,
 });
