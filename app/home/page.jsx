@@ -90,10 +90,23 @@ function extractCardData(card, email = null, productName = null, flag = true) {
 
   // Main text construction
   let mainText = text;
-  if (!mainText && final_response && typeof final_response === "string")
+  // Always try to display final_response if present and non-empty
+  if ((!mainText || !mainText.trim()) && final_response && typeof final_response === "string" && final_response.trim()) {
     mainText = final_response;
-  if (!mainText && sub_answers.length > 0)
+  }
+  if ((!mainText || !mainText.trim()) && sub_answers.length > 0)
     mainText = sub_answers.join("\n\n---\n\n");
+
+  // If text and final_response both exist and are different, show both (final_response appended)
+  if (
+    text &&
+    final_response &&
+    typeof final_response === "string" &&
+    final_response.trim() &&
+    text.trim() !== final_response.trim()
+  ) {
+    mainText = text + "\n\n" + final_response;
+  }
 
   const createdAt =
     card.createdAt ||
@@ -535,7 +548,15 @@ export default function MainPage() {
           }));
         },
         onResult: (data) => {
-          if (data && data.result && (data.result.type === 2 || data.result.type === "2")) {
+          // Always display the final_response if present for both query types
+          let textToShow = "";
+          if (
+            data &&
+            typeof data === "object" &&
+            data.result &&
+            (data.result.type === 2 || data.result.type === "2")
+          ) {
+            // Side panel "General Talk" answer
             let all = [];
             if (Array.isArray(data.result.sub_answers)) {
               all = [...data.result.sub_answers];
@@ -582,18 +603,34 @@ export default function MainPage() {
             }
             animateChunk();
           } else {
+            // For other types, display the final_response if exists
+            if (
+              data &&
+              typeof data === "object" &&
+              data.final_response &&
+              typeof data.final_response === "string"
+            ) {
+              textToShow = data.final_response;
+            } else if (
+              data &&
+              typeof data === "object" &&
+              data.text &&
+              typeof data.text === "string"
+            ) {
+              textToShow = data.text;
+            } else if (data && Array.isArray(data.sub_answers)) {
+              textToShow = data.sub_answers.join("\n\n---\n\n");
+            } else if (data && data.error) {
+              textToShow = data.error;
+            } else {
+              textToShow = "No response.";
+            }
             setSideMessages((msgs) =>
               msgs.map((msg, idx) =>
                 idx === msgIdx
                   ? {
                     ...msg,
-                    chunks: [
-                      data.result
-                        ? renderSidebarResponse(data.result)
-                        : data.sub_answers
-                          ? renderSidebarResponse(data)
-                          : data.error || "No response.",
-                    ],
+                    chunks: [textToShow],
                   }
                   : msg
               )
@@ -616,45 +653,34 @@ export default function MainPage() {
     }
   };
 
-  // Optionally show logs in a collapsible section (for both main and side)
+  // LogsDisplay is now always open and visible
   function LogsDisplay({ logs }) {
-    const [open, setOpen] = useState(false);
     if (!logs || !logs.length) return null;
     return (
-      <div style={{ margin: "1rem 0", background: "#eee", borderRadius: 7, padding: "0.75rem" }}>
-        <button onClick={() => setOpen(!open)} style={{
-          background: "none",
-          border: "none",
-          color: "#3F72AF",
-          fontWeight: 600,
-          cursor: "pointer",
-          marginBottom: 5,
-          fontSize: 15
+      <div style={{
+        margin: "1rem 0",
+        background: "#eee",
+        borderRadius: 7,
+        padding: "0.75rem"
+      }}>
+        <div style={{
+          background: "#222e3a",
+          color: "#D9EAFD",
+          fontSize: 13,
+          borderRadius: 7,
+          padding: "0.75rem",
+          whiteSpace: "pre-wrap",
+          maxHeight: 300,
+          overflowY: "auto"
         }}>
-          {open ? "Hide Backend Logs" : "Show Backend Logs"}
-        </button>
-        {open && (
-          <pre
-            style={{
-              background: "#222e3a",
-              color: "#D9EAFD",
-              fontSize: 13,
-              borderRadius: 7,
-              padding: "0.75rem",
-              whiteSpace: "pre-wrap",
-              maxHeight: 300,
-              overflowY: "auto"
-            }}
-          >
-            {logs.map((log, idx) =>
-              typeof log === "string"
-                ? log
-                : typeof log === "object"
+          {logs.map((log, idx) =>
+            typeof log === "string"
+              ? log
+              : typeof log === "object"
                 ? JSON.stringify(log, null, 2)
                 : String(log)
-            ).join("\n")}
-          </pre>
-        )}
+          ).join("\n")}
+        </div>
       </div>
     );
   }
@@ -841,11 +867,11 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-..." />
               </svg>
             </button>
           </form>
-          {/* Main logs display */}
+          {/* Main logs display - always visible */}
           <LogsDisplay logs={mainLogs} />
           {showCard && (
             <div
@@ -876,6 +902,27 @@ export default function MainPage() {
                   ) {
                     const cardData = extractCardData(mainCard, null, input);
                     return <Card card={cardData} onSuggestedQuestionClick={handleSuggestedQuestionClick} />;
+                  }
+                  // Always display final_response if available
+                  if (
+                    mainCard &&
+                    typeof mainCard === "object" &&
+                    mainCard.final_response &&
+                    typeof mainCard.final_response === "string"
+                  ) {
+                    return (
+                      <div
+                        style={{
+                          color: "#fff",
+                          background: cardBg,
+                          borderRadius: 8,
+                          padding: "1.2rem",
+                          textAlign: "left",
+                        }}
+                      >
+                        <ReactMarkdown>{mainCard.final_response}</ReactMarkdown>
+                      </div>
+                    );
                   }
                   if (mainCard && mainCard.error) {
                     return (
@@ -1132,7 +1179,7 @@ export default function MainPage() {
                     >
                       {msg.user}
                     </div>
-                    {/* Side logs display per message idx */}
+                    {/* Side logs display per message idx - always visible */}
                     <LogsDisplay logs={sideLogs[idx]} />
                     {msg.chunks && msg.chunks.map((chunk, chunkIdx) => (
                       <div
@@ -1262,7 +1309,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 ..." />
                 </svg>
               </button>
             </form>
