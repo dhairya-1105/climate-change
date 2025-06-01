@@ -1,8 +1,9 @@
 import os
+import sys
 from dotenv import load_dotenv
+import json
 load_dotenv()
 
-#watsonx.ai api keys
 project_id = os.getenv("IBM_PROJECT_ID")
 api_key = os.getenv("WATSONX_API_KEY")
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -12,13 +13,12 @@ credentials = {
     "apikey": api_key
     }
 
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain_ibm import WatsonxEmbeddings, WatsonxLLM
 from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenTextParamsMetaNames
 import os
 import pickle
 
-# define embeddings model
 embeddings = WatsonxEmbeddings(
     model_id='ibm/slate-125m-english-rtrvr',
     apikey=credentials.get('apikey'),
@@ -26,14 +26,12 @@ embeddings = WatsonxEmbeddings(
     project_id=project_id
 )
 
-# load from disk (if exists) or initialize new FAISS store
 faiss_index_path = "faiss_index"
 
 if os.path.exists(faiss_index_path):
-    vectorstore = FAISS.load_local(faiss_index_path, embeddings)
+    vectorstore = FAISS.load_local(faiss_index_path, embeddings, allow_dangerous_deserialization=True)
 else:
-    # initialize an empty FAISS store (you'll need to add documents later)
-    vectorstore = FAISS.from_texts(["dummy"], embeddings)  # replace with your actual docs
+    vectorstore = FAISS.from_texts(["dummy"], embeddings)
     vectorstore.save_local(faiss_index_path)
 
 from langchain.schema import Document
@@ -115,6 +113,8 @@ Discussion of current challenges and risks.
 The role of human activities or industries in shaping the issue.
 Possible solutions or innovations addressing the problem.
 Any notable controversies, trade-offs, or debates surrounding it.
+
+Give links wherever you could of trusted sources in markdown format only : [unicef study](https://www.unicef.org/environment-and-climate-change)
 --------------------------------------------------------------------------------------
 IMPORTANT ::: EVERYTHING MUST BE IN MARKDOWN FORMAT. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
 DO NOT ANSWER EMPTY QUESTIONS OR NOTES.
@@ -240,7 +240,7 @@ def retrieve(state):
     Returns:
         state (dict): New key added to state, documents, that contains retrieved documents
     """
-    print("---Retrieving Documents---")
+    print("---Retrieving Documents---", flush= True)
     question = state["question"]
     steps = state["steps"]
     steps.append("retrieve_documents")
@@ -258,7 +258,7 @@ def grade_documents(state):
     Returns:
         state (dict): Updates documents key with only filtered relevant documents
     """
-    print("---Grading Retrieved Documents---")
+    print("---Grading Retrieved Documents---", flush= True)
     documents = state["documents"]
     question = state["question"]
     steps = state["steps"]
@@ -283,7 +283,7 @@ def decide_to_generate(state):
     Returns:
         str: Binary decision for next node to call
     """
-    print("---At decision Edge---")
+    # print("---At decision Edge---")
     """-----------inputs-----------"""
     search = state["search"]
 
@@ -294,7 +294,7 @@ def decide_to_generate(state):
         return "generate"
 
 def web_search(state):
-    print("---Searching the Web---")
+    print("---Searching the Web---", flush= True)
     documents = state.get("documents", [])
     question = state["question"]
     steps = state["steps"]
@@ -311,7 +311,6 @@ def web_search(state):
             for d in web_results
         ]
     )
-
     return {
         "documents": documents,
         "question": question,
@@ -329,7 +328,7 @@ def generate(state):
     Returns:
         state (dict): New key added to state, generation, that contains LLM generation
     """
-    print("---Generating Response---")
+    print("---Generating Response---", flush = True)
     documents = state["documents"]
     question = state["question"]
     steps = state["steps"]
@@ -345,7 +344,6 @@ def generate(state):
         "longitude": longitude
     })
     
-    print("Response to subquestion:", generation)
     return {
         "documents": documents, 
         "question": question, 
@@ -404,9 +402,7 @@ def transform_query(state: dict) -> dict:
     user_query = state["user_query"]
     steps = state["steps"]
     query_type = state.get("type", 2)
-
-    print("User Query:", user_query)
-    print("---Decomposing the QUERY---")
+    print("---Decomposing the QUERY---", flush=True)
     steps.append("transform_query")
     type = state["type"]
     sub_questions = query_decompose.invoke({"user_query": user_query, "type" : type})
@@ -419,7 +415,6 @@ def transform_query(state: dict) -> dict:
             "steps": steps,
         }
     else:
-        print("Decomposed into:", list_of_questions)
         return {
             **state,
             "sub_questions": list_of_questions,
@@ -437,7 +432,6 @@ def CRAG_loop(state: dict) -> dict:
     steps.append("entering iterative CRAG for sub questions")
 
     for q in questions:
-        print("Handling subquestion:", q)
         response = CRAG_graph.invoke({"question": q, "steps": steps, "type": query_type})["generation"]
         sub_answers.append(response)
 
@@ -449,7 +443,7 @@ def CRAG_loop(state: dict) -> dict:
 
 
 def consolidate(state: dict) -> dict:
-    print("---Consolidating Response---")
+    print("---Consolidating Response---", flush= True)
     answers = state['sub_answers']
     questions = state['sub_questions']
     user_query = state['user_query']
@@ -459,15 +453,10 @@ def consolidate(state: dict) -> dict:
     longitude = state["longitude"]
 
     steps.append("generating final answer")
-    print("Query type:", query_type)
-    print("Sub-answers:", answers)
-    print("Sub-questions:", questions)
-
     if query_type == 1:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
         raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 1, "latitude": latitude, "longitude": longitude})
         structured_response = json_consolidator.invoke({"text": raw_response})
-        print("Final Structured Response:", structured_response)
         return {
             **state,
             "final_response": structured_response,
@@ -477,13 +466,13 @@ def consolidate(state: dict) -> dict:
     else:
         qa_pairs = [{questions[i]: answers[i].strip()} for i in range(min(len(questions), len(answers)))]
         raw_response = final_rag_chain.invoke({"documents": qa_pairs, "question": user_query, "type" : 2, "latitude": latitude, "longitude": longitude})
-        print("Final Response to Original Query:", raw_response)
         return {
             **state,
             "final_response": raw_response,
             "steps": steps,
             "intermediate_qa": qa_pairs,
         }
+
 
 nested_CRAG = StateGraph(GraphState)
 nested_CRAG.add_node("transform_query", transform_query)
@@ -495,3 +484,23 @@ nested_CRAG.add_edge("CRAG_loop", "consolidate")
 nested_CRAG.add_edge("consolidate", END)
 
 agentic_rag = nested_CRAG.compile()
+
+if len(sys.argv) >= 5:
+    user_query = sys.argv[1]
+    try:
+        type = int(sys.argv[2])
+    except (ValueError, IndexError):
+        type = 2
+    try:
+        latitude = float(sys.argv[3])
+    except (ValueError, IndexError):
+        latitude = None
+    try:
+        longitude = float(sys.argv[4])
+    except (ValueError, IndexError):
+        longitude = None
+    response = agentic_rag.invoke({"user_query": user_query, "steps": [], "type" : type, "latitude": latitude, "longitude": longitude})
+    print("===RESULT===")
+    print(json.dumps({"result": response}), flush=True)
+else:
+    print("Not enough arguments received.")

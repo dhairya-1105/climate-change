@@ -9,14 +9,16 @@ export default async function handler(req, res) {
 
   const cookies = cookie.parse(req.headers.cookie || '');
   const token = cookies.accessToken;
- // console.log("ok");
+
   if (!token) {
     return res.status(200).json({ isLoggedIn: false, error: 'No token found' });
   }
 
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
-    return res.status(200).json({ isLoggedIn: true, user });
+    const { password, ...safeUser } = user;
+    console.log(safeUser.email);
+    return res.status(200).json({ isLoggedIn: true, user: safeUser });
   } catch (error) {
     return res.status(200).json({ isLoggedIn: false, error: 'Invalid or expired token' });
   }

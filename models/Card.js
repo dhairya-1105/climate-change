@@ -1,22 +1,37 @@
 import mongoose from "mongoose";
 
-const LinkSchema = new mongoose.Schema({
+// Citation schema (for sources with label and url)
+const CitationSchema = new mongoose.Schema({
   label: {
     type: String,
     required: true,
   },
   url: {
     type: String,
+    required: false,
+  }
+}, { _id: false });
+
+// Recommendation schema (now an object with just a label)
+const RecommendationSchema = new mongoose.Schema({
+  label: {
+    type: String,
     required: true,
   }
 }, { _id: false });
 
+// Main Card schema
 const CardSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
+    index: true,
+  },
+  product: {
+    type: String,
+    required: true,
+    default: "Climate Change Analyzer", // Use your desired product name here
   },
   rating: {
     type: Number,
@@ -28,9 +43,9 @@ const CardSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  citations: [LinkSchema], 
-  recommendations: [LinkSchema], 
-  suggestedQuestions: [String],
+  citations: { type: [CitationSchema], default: [] }, // Array of { label, url }
+  recommendations: { type: [RecommendationSchema], default: [] }, // Array of { label }
+  suggestedQuestions: { type: [String], default: [] },
 }, {
   timestamps: true,
 });

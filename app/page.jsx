@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/navbar";
 import Card from "@/components/card";
 
-// User location hook
 function useUserLocation() {
   const [location, setLocation] = useState({ latitude: null, longitude: null });
   useEffect(() => {
@@ -21,83 +20,203 @@ function useUserLocation() {
   return location;
 }
 
-const NAVBAR_HEIGHT = 72; // px
+const NAVBAR_HEIGHT = 72;
 
-function renderSidebarResponse(result) {
-  if (!result) return "No response.";
-  let subAnswersSection = "";
-  if (Array.isArray(result.sub_answers) && result.sub_answers.length > 0) {
-    subAnswersSection = result.sub_answers
-      .map((ans, i) => `**Sub-answer ${i + 1}:**\n\n${ans}`)
-      .join('\n\n---\n\n');
+function parseFinalResponseJSON(final_response) {
+  if (!final_response || typeof final_response !== "string") return null;
+  let match = final_response.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
+  if (match) {
+    try {
+      return JSON.parse(match[1]);
+    } catch (e) {}
   }
-  let finalResponseSection = "";
-  if (result.final_response) {
-    finalResponseSection = `**Final Answer:**\n\n${result.final_response}`;
+  try {
+    let trimmed = final_response.trim().replace(/^```json|^```|```$/g, "");
+    return JSON.parse(trimmed);
+  } catch (e) {
+    return null;
   }
-  return [subAnswersSection, finalResponseSection].filter(Boolean).join('\n\n---\n\n');
 }
 
-function renderCardResponse(result) {
-  if (!result) return {};
-  let subAnswers = Array.isArray(result.sub_answers) ? result.sub_answers : [];
-  let finalResponse = result.final_response || "";
-  return {
-    subAnswers,
-    finalResponse,
+function extractCardData(card, email = null, productName = null, flag = true) {
+  if (!card) return {};
+  let data = card.result || card;
+  // If final_response is a code block, parse it and merge into data
+  let parsedFromFinal = null;
+  if (
+    typeof data.final_response === "string" &&
+    data.final_response.trim().startsWith("```")
+  ) {
+    parsedFromFinal = parseFinalResponseJSON(data.final_response);
+  }
+  if (parsedFromFinal && typeof parsedFromFinal === "object") {
+    data = { ...data, ...parsedFromFinal };
+  }
+
+  // Defensive: ensure arrays
+  const rating = data.rating ?? null;
+  const text = data.text ?? "";
+  const citationsArr = Array.isArray(data.citations) ? data.citations : [];
+  const recommendationsArr = Array.isArray(data.recommendations) ? data.recommendations : [];
+  const questionsArr = (
+    Array.isArray(data.suggestedQuestions)
+      ? data.suggestedQuestions
+      : Array.isArray(data.suggested_questions)
+        ? data.suggested_questions
+        : []
+  );
+  const sub_answers = Array.isArray(data.sub_answers) ? data.sub_answers : [];
+  const final_response = data.final_response ?? "";
+
+  // Normalize citations to {label, url}
+  const citations = citationsArr.map((c) => {
+    if (typeof c === "object" && c.label && c.url)
+      return { label: c.label, url: c.url };
+    const match =
+      typeof c === "string" && c.match(/^\[(.*)\]\((.*)\)$/);
+    if (match) return { label: match[1], url: match[2] };
+    if (typeof c === "string" && c.startsWith("http"))
+      return { label: "Source", url: c };
+    return { label: c?.toString() || "Source", url: "#" };
+  });
+
+  // Normalize recommendations to {label}
+  const recommendations = recommendationsArr.map((rec) => {
+    if (typeof rec === "object" && rec.label) return { label: rec.label };
+    if (typeof rec === "object" && rec.text) return { label: rec.text };
+    if (typeof rec === "string") return { label: rec };
+    return { label: "Recommendation" };
+  });
+
+  // Main text construction
+  let mainText = text;
+  if (!mainText && final_response && typeof final_response === "string")
+    mainText = final_response;
+  if (!mainText && sub_answers.length > 0)
+    mainText = sub_answers.join("\n\n---\n\n");
+
+  const createdAt =
+    card.createdAt ||
+    data.createdAt ||
+    data.date ||
+    data.timestamp ||
+    new Date().toISOString();
+
+  const result = {
+    email: email || data.email || undefined,
+    product: productName || data.product || data.productName || undefined,
+    rating,
+    text: mainText,
+    citations,
+    recommendations,
+    suggestedQuestions: questionsArr,
   };
+  if (flag) {
+    result.createdAt = createdAt;
+  }
+  if (card._id) result._id = card._id;
+  return result;
+}
+
+/**
+ * Reads and parses SSE stream from response, calling callbacks on logs/result
+ */
+async function readSSEStreamRealtime(response, { onLogs, onResult }) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let done = false;
+  let resultReceived = false;
+  const reader = response.body.getReader();
+  while (!done) {
+    const { value, done: streamDone } = await reader.read();
+    if (value) {
+      buffer += decoder.decode(value, { stream: !streamDone });
+      // Split by double newlines (SSE event delimiter)
+      let events = buffer.split("\n\n");
+      // Keep last partial event in buffer
+      buffer = events.pop();
+      for (const eventChunk of events) {
+        // Each event can be multiple lines, parse event type and data
+        const lines = eventChunk.split("\n");
+        let eventType = null;
+        let dataLines = [];
+        for (const l of lines) {
+          if (l.startsWith("event: ")) eventType = l.replace("event: ", "");
+          if (l.startsWith("data: ")) dataLines.push(l.replace("data: ", ""));
+        }
+        const dataStr = dataLines.join("\n");
+        if (eventType === "logs" && onLogs) {
+          try {
+            onLogs(JSON.parse(dataStr));
+          } catch {
+            onLogs(dataStr);
+          }
+        }
+        if (eventType === "result" && onResult) {
+          resultReceived = true;
+          let parsed;
+          try {
+            parsed = JSON.parse(dataStr);
+          } catch {
+            parsed = { error: "Parse error", raw: dataStr };
+          }
+          onResult(parsed);
+        }
+        if (eventType === "error" && onResult) {
+          resultReceived = true;
+          let parsed;
+          try {
+            parsed = JSON.parse(dataStr);
+          } catch {
+            parsed = { error: "Parse error", raw: dataStr };
+          }
+          onResult(parsed);
+        }
+      }
+    }
+    if (streamDone) done = true;
+  }
 }
 
 export default function MainPage() {
-  // THEME COLORS
-  const mainBg = "#D9EAFD";      // background
-  const cardBg = "#3F72AF";      // main card/box is now the "real" color
-  const cardAlt = "#3F72AF";     // sidebar/alt card
-  const inputBg = "#DBE2EF";     // textboxes
-  const textMain = "#112D4E";    // primary text
-  const textSub = "#6DA9E4";     // secondary text
+  const mainBg = "#D9EAFD";
+  const cardBg = "#3F72AF";
+  const cardAlt = "#3F72AF";
+  const inputBg = "#DBE2EF";
+  const textMain = "#112D4E";
+  const textSub = "#6DA9E4";
 
-  // For heading animation
   const [showUnderline, setShowUnderline] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowUnderline(true);
-    }, 200);
+    const timer = setTimeout(() => setShowUnderline(true), 200);
     return () => clearTimeout(timer);
   }, []);
 
-  // Side panel state
   const [sideOpen, setSideOpen] = useState(false);
   const [sideWidth, setSideWidth] = useState(380);
   const [isResizing, setIsResizing] = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState(true);
   const [sideFullScreen, setSideFullScreen] = useState(false);
 
-  // Main message state
   const [input, setInput] = useState("");
   const [mainLoading, setMainLoading] = useState(false);
   const [mainCard, setMainCard] = useState(null);
+  const [mainLogs, setMainLogs] = useState([]); // logs for main
   const [showCard, setShowCard] = useState(false);
   const [msgBoxLifted, setMsgBoxLifted] = useState(false);
   const [quoteFading, setQuoteFading] = useState(false);
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
-  // Animated card output (type 1, not used in this version)
-  const [cardSubAnswers, setCardSubAnswers] = useState([]);
-  const [cardFinalAnswer, setCardFinalAnswer] = useState("");
-  const [cardIsTyping, setCardIsTyping] = useState(false);
-
-  // Side message state
   const [sideInput, setSideInput] = useState("");
   const [sideLoading, setSideLoading] = useState(false);
   const [sideMessages, setSideMessages] = useState([]);
   const [sideTypingIdx, setSideTypingIdx] = useState(-1);
   const [sideTypingChunks, setSideTypingChunks] = useState([]);
   const [sideTypingCurrentChunk, setSideTypingCurrentChunk] = useState("");
+  const [sideLogs, setSideLogs] = useState({}); // logs for each side message idx
   const sidebarBottomRef = useRef(null);
 
-  // User & cards
   const [userEmail, setUserEmail] = useState(null);
   const [username, setUsername] = useState("");
   const [userCards, setUserCards] = useState([]);
@@ -196,7 +315,10 @@ export default function MainPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !document.getElementById("msgbox-fadeup-style")) {
+    if (
+      typeof window !== "undefined" &&
+      !document.getElementById("msgbox-fadeup-style")
+    ) {
       const style = document.createElement("style");
       style.id = "msgbox-fadeup-style";
       style.innerHTML = `
@@ -261,7 +383,6 @@ export default function MainPage() {
       document.head.appendChild(style);
     }
   }, []);
-
   useEffect(() => {
     if (showCard) {
       setTimeout(() => setContentSlideUp(true), 80);
@@ -271,7 +392,6 @@ export default function MainPage() {
       setCardAppear(false);
     }
   }, [showCard]);
-
   useEffect(() => {
     if (sidebarBottomRef.current) {
       sidebarBottomRef.current.scrollIntoView({ behavior: "smooth" });
@@ -289,11 +409,23 @@ export default function MainPage() {
   const handleFullScreen = () => setSideFullScreen(true);
   const handleExitFullScreen = () => setSideFullScreen(false);
 
+  const handleSuggestedQuestionClick = (question) => {
+    setSideOpen(true);
+    setSideCollapsed(false);
+    setSideInput(question);
+    setTimeout(() => {
+      document.querySelector("#side-query-input")?.focus();
+      handleSendSide({ preventDefault: () => { } }, question);
+    }, 100);
+  };
+
+  // Helper to stream logs/results from SSE API for main query
   const handleSendMain = async (e) => {
     e.preventDefault();
     if (!input.trim() || mainLoading) return;
     setMainLoading(true);
     setMainCard(null);
+    setMainLogs([]);
     setShowCard(false);
     setMsgBoxLifted(true);
     setQuoteFading(true);
@@ -318,45 +450,57 @@ export default function MainPage() {
           const errorText = await response.text();
           setMainCard({ error: `FastAPI error: ${errorText}` });
           setShowCard(true);
+          setMainLoading(false);
+          setInput("");
           return;
         }
-        const data = await response.json();
-        if (
-          data &&
-          data.card &&
-          typeof data.card === "object" &&
-          userEmail
-        ) {
-          await fetch("/api/createCard.js", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...data.card,
-              email: userEmail,
-            }),
-          });
-          setUserCards((prev) => [data.card, ...prev].slice(0, 3));
-        }
 
-        setMainCard(data.card || data);
-        setShowCard(true);
+        await readSSEStreamRealtime(response, {
+          onLogs: (log) => {
+            setMainLogs((prev) => [...prev, log]);
+          },
+          onResult: async (result) => {
+            if (
+              result &&
+              typeof result === "object" &&
+              result.result &&
+              userEmail
+            ) {
+              const cardForDb = extractCardData({ result: result.result }, userEmail, input, false);
+              const resp = await fetch("/api/createCard", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cardForDb),
+              });
+              if (resp.ok) {
+                const savedCard = await resp.json();
+                setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
+              }
+            }
+            setMainCard(result);
+            setShowCard(true);
+            setMainLoading(false);
+            setInput("");
+          }
+        });
       } catch (err) {
         setMainCard({ error: "Failed to fetch response." });
         setShowCard(true);
-      } finally {
         setMainLoading(false);
         setInput("");
       }
     }, 400);
   };
 
-  // Structure sidebar output as array of chunks and add one-after-another
-  const handleSendSide = async (e) => {
-    e.preventDefault();
-    if (!sideInput.trim() || sideLoading) return;
+  // Helper to stream logs/results from SSE API for side queries
+  const handleSendSide = async (e, overrideInput = null) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    const query = overrideInput !== null ? overrideInput : sideInput;
+    if (!query.trim() || sideLoading) return;
     setSideLoading(true);
-    setSideMessages((msgs) => [...msgs, { user: sideInput, chunks: [] }]);
+    setSideMessages((msgs) => [...msgs, { user: query, chunks: [] }]);
     const msgIdx = sideMessages.length;
+    setSideLogs((prev) => ({ ...prev, [msgIdx]: [] }));
     try {
       const response = await fetch('/api/query', {
         method: "POST",
@@ -365,7 +509,7 @@ export default function MainPage() {
         },
         body: JSON.stringify({
           type: 2,
-          prompt: sideInput,
+          prompt: query,
           latitude: location.latitude,
           longitude: location.longitude,
         }),
@@ -379,74 +523,86 @@ export default function MainPage() {
               : msg
           )
         );
+        setSideLoading(false);
+        setSideInput("");
         return;
       }
-      const data = await response.json();
-      // Animate message like LLM chat, but add chunks one below the other
-      if (data.result && (data.result.type === 2 || data.result.type === "2")) {
-        let all = [];
-        if (Array.isArray(data.result.sub_answers)) {
-          all = [...data.result.sub_answers];
-        }
-        if (data.result.final_response) {
-          all.push(data.result.final_response);
-        }
-        let currentChunks = [];
-        let idx = 0;
-        function animateChunk() {
-          if (idx < all.length) {
-            setSideTypingIdx(msgIdx);
-            setSideTypingChunks(currentChunks);
-            setSideTypingCurrentChunk(""); // Start typing the next chunk
-            let full = all[idx];
-            let charIdx = 0;
-            function typeChar() {
-              setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
-              charIdx++;
-              if (charIdx < full.length) {
-                setTimeout(typeChar, 2); // FASTEST typing
+      await readSSEStreamRealtime(response, {
+        onLogs: (log) => {
+          setSideLogs((prev) => ({
+            ...prev,
+            [msgIdx]: [...(prev[msgIdx] || []), log],
+          }));
+        },
+        onResult: (data) => {
+          if (data && data.result && (data.result.type === 2 || data.result.type === "2")) {
+            let all = [];
+            if (Array.isArray(data.result.sub_answers)) {
+              all = [...data.result.sub_answers];
+            }
+            if (data.result.final_response) {
+              all.push(data.result.final_response);
+            }
+            let currentChunks = [];
+            let idx = 0;
+            function animateChunk() {
+              if (idx < all.length) {
+                setSideTypingIdx(msgIdx);
+                setSideTypingChunks(currentChunks);
+                setSideTypingCurrentChunk("");
+                let full = all[idx];
+                let charIdx = 0;
+                function typeChar() {
+                  setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
+                  charIdx++;
+                  if (charIdx < full.length) {
+                    setTimeout(typeChar, 2);
+                  } else {
+                    currentChunks = [...currentChunks, full];
+                    setSideMessages((prev) =>
+                      prev.map((msg, mi) =>
+                        mi === msgIdx
+                          ? {
+                            ...msg,
+                            chunks: [...currentChunks],
+                          }
+                          : msg
+                      )
+                    );
+                    idx++;
+                    setTimeout(animateChunk, 30);
+                  }
+                }
+                typeChar();
               } else {
-                currentChunks = [...currentChunks, full];
-                setSideMessages((prev) =>
-                  prev.map((msg, mi) =>
-                    mi === msgIdx
-                      ? {
-                          ...msg,
-                          chunks: [...currentChunks],
-                        }
-                      : msg
-                  )
-                );
-                idx++;
-                setTimeout(animateChunk, 30); // minimal delay before next
+                setSideTypingIdx(-1);
+                setSideTypingChunks([]);
+                setSideTypingCurrentChunk("");
               }
             }
-            typeChar();
+            animateChunk();
           } else {
-            setSideTypingIdx(-1);
-            setSideTypingChunks([]);
-            setSideTypingCurrentChunk("");
+            setSideMessages((msgs) =>
+              msgs.map((msg, idx) =>
+                idx === msgIdx
+                  ? {
+                    ...msg,
+                    chunks: [
+                      data.result
+                        ? renderSidebarResponse(data.result)
+                        : data.sub_answers
+                          ? renderSidebarResponse(data)
+                          : data.error || "No response.",
+                    ],
+                  }
+                  : msg
+              )
+            );
           }
+          setSideLoading(false);
+          setSideInput("");
         }
-        animateChunk();
-      } else {
-        setSideMessages((msgs) =>
-          msgs.map((msg, idx) =>
-            idx === msgIdx
-              ? {
-                  ...msg,
-                  chunks: [
-                    data.result
-                      ? renderSidebarResponse(data.result)
-                      : data.sub_answers
-                      ? renderSidebarResponse(data)
-                      : data.error || "No response.",
-                  ],
-                }
-              : msg
-          )
-        );
-      }
+      });
     } catch (err) {
       setSideMessages((msgs) =>
         msgs.map((msg, idx) =>
@@ -455,70 +611,113 @@ export default function MainPage() {
             : msg
         )
       );
-    } finally {
       setSideLoading(false);
       setSideInput("");
     }
   };
 
+  // Optionally show logs in a collapsible section (for both main and side)
+  function LogsDisplay({ logs }) {
+    const [open, setOpen] = useState(false);
+    if (!logs || !logs.length) return null;
+    return (
+      <div style={{ margin: "1rem 0", background: "#eee", borderRadius: 7, padding: "0.75rem" }}>
+        <button onClick={() => setOpen(!open)} style={{
+          background: "none",
+          border: "none",
+          color: "#3F72AF",
+          fontWeight: 600,
+          cursor: "pointer",
+          marginBottom: 5,
+          fontSize: 15
+        }}>
+          {open ? "Hide Backend Logs" : "Show Backend Logs"}
+        </button>
+        {open && (
+          <pre
+            style={{
+              background: "#222e3a",
+              color: "#D9EAFD",
+              fontSize: 13,
+              borderRadius: 7,
+              padding: "0.75rem",
+              whiteSpace: "pre-wrap",
+              maxHeight: 300,
+              overflowY: "auto"
+            }}
+          >
+            {logs.map((log, idx) =>
+              typeof log === "string"
+                ? log
+                : typeof log === "object"
+                ? JSON.stringify(log, null, 2)
+                : String(log)
+            ).join("\n")}
+          </pre>
+        )}
+      </div>
+    );
+  }
+
   const sidePanelStyle = sideFullScreen
     ? {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: "100vh",
-        width: "100vw",
-        minWidth: 0,
-        maxWidth: "100vw",
-        background: cardAlt,
-        zIndex: 100,
-        boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
-        display: "flex",
-        flexDirection: "column",
-        transition: "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
-        borderLeft: `1px solid ${cardAlt}`,
-        overflow: "hidden",
-      }
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: "100vh",
+      width: "100vw",
+      minWidth: 0,
+      maxWidth: "100vw",
+      background: cardAlt,
+      zIndex: 100,
+      boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
+      display: "flex",
+      flexDirection: "column",
+      transition:
+        "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
+      borderLeft: `1px solid ${cardAlt}`,
+      overflow: "hidden",
+    }
     : {
-        position: "fixed",
-        top: 0,
-        right: 0,
-        height: "100vh",
-        width: sideWidth,
-        minWidth: 320,
-        maxWidth: 600,
-        background: cardAlt,
-        boxShadow: !sideCollapsed
-          ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
-          : "none",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 30,
-        transform: sideCollapsed
-          ? `translateX(${sideWidth - 40}px)`
-          : "translateX(0)",
-        opacity: !sideCollapsed ? 1 : 0,
-        pointerEvents: !sideCollapsed ? "all" : "none",
-        transition:
-          "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
-        borderLeft: `1px solid ${cardAlt}`,
-      };
+      position: "fixed",
+      top: 0,
+      right: 0,
+      height: "100vh",
+      width: sideWidth,
+      minWidth: 320,
+      maxWidth: 600,
+      background: cardAlt,
+      boxShadow: !sideCollapsed
+        ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
+        : "none",
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: 30,
+      transform: sideCollapsed
+        ? `translateX(${sideWidth - 40}px)`
+        : "translateX(0)",
+      opacity: !sideCollapsed ? 1 : 0,
+      pointerEvents: !sideCollapsed ? "all" : "none",
+      transition:
+        "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
+      borderLeft: `1px solid ${cardAlt}`,
+    };
 
   return (
     <div
       style={{
         display: "flex",
-        height: "100vh",
+        flexDirection: "column",
+        minHeight: "100vh",
         width: "100vw",
-        overflow: "hidden",
+        overflow: "auto",
         position: "relative",
         background: mainBg,
       }}
     >
-      {/* Main Content */}
       <main
         style={{
           width: sideFullScreen
@@ -537,7 +736,6 @@ export default function MainPage() {
           paddingTop: `${NAVBAR_HEIGHT + 16}px`,
         }}
       >
-        {/* Main Heading with animation (from tutorial page) */}
         <div className="text-center mb-16" style={{ marginTop: 10 }}>
           <h1
             className="text-4xl md:text-5xl font-bold mb-6"
@@ -577,13 +775,12 @@ export default function MainPage() {
             cost
           </h1>
         </div>
-
-        {/* All content below quote block */}
         <div
           className={`slide-up-content${contentSlideUp ? " slide" : ""}`}
           style={{
             width: "100%",
-            maxWidth: 540,
+            maxWidth: "900px",
+            minWidth: "340px",
             margin: "0 auto",
             display: "flex",
             flexDirection: "column",
@@ -591,12 +788,11 @@ export default function MainPage() {
             opacity: 1,
           }}
         >
-          {/* Input bar with send button */}
           <form
             className={msgBoxLifted ? "msgbox-lift" : "msgbox-rest"}
             style={{
               width: "100%",
-              maxWidth: 500,
+              maxWidth: 800,
               display: "flex",
               flexDirection: "row",
               alignItems: "center",
@@ -606,6 +802,7 @@ export default function MainPage() {
               padding: "0.5rem 1.2rem",
               zIndex: 6,
               color: textMain,
+              marginBottom: 18
             }}
             onSubmit={handleSendMain}
             autoComplete="off"
@@ -624,7 +821,7 @@ export default function MainPage() {
                 marginRight: 10,
               }}
               type="text"
-              placeholder="Start your query..."
+              placeholder="Enter product name for analysis..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={mainLoading}
@@ -644,18 +841,19 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-..."/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
               </svg>
             </button>
           </form>
-
-          {/* Card (response) */}
+          {/* Main logs display */}
+          <LogsDisplay logs={mainLogs} />
           {showCard && (
             <div
               className="main-card-appear"
               style={{
                 width: "100%",
-                maxWidth: 500,
+                maxWidth: "900px",
+                minWidth: "340px",
                 marginTop: 22,
                 minHeight: 80,
                 zIndex: 2,
@@ -671,40 +869,14 @@ export default function MainPage() {
                 <div style={{ padding: "2rem", color: "#888", textAlign: "center" }}>Loading...</div>
               ) : (
                 (() => {
-                  // Card for type 1 queries and general fallback
                   if (
                     mainCard &&
                     typeof mainCard === "object" &&
-                    (mainCard.result || mainCard.sub_answers || mainCard.final_response)
+                    mainCard.result
                   ) {
-                    const result = mainCard.result || mainCard;
-                    return (
-                      <div style={{
-                        background: cardBg,
-                        borderRadius: 14,
-                        padding: "1.1rem 1.3rem",
-                        wordBreak: "break-word",
-                        overflowWrap: "anywhere",
-                        maxWidth: "100%",
-                        width: "100%",
-                        color: "#fff",
-                      }}>
-                        <ReactMarkdown>
-                          {renderSidebarResponse(result)}
-                        </ReactMarkdown>
-                      </div>
-                    );
+                    const cardData = extractCardData(mainCard, null, input);
+                    return <Card card={cardData} onSuggestedQuestionClick={handleSuggestedQuestionClick} />;
                   }
-                  // Card for rating-based objects (old style)
-                  if (
-                    mainCard &&
-                    typeof mainCard === "object" &&
-                    mainCard !== null &&
-                    mainCard.hasOwnProperty("rating")
-                  ) {
-                    return <Card card={mainCard} />;
-                  }
-                  // Card error
                   if (mainCard && mainCard.error) {
                     return (
                       <div
@@ -725,11 +897,10 @@ export default function MainPage() {
               )}
             </div>
           )}
-
-          {/* Recent cards section */}
           <div style={{
             width: "100%",
-            maxWidth: 540,
+            maxWidth: "900px",
+            minWidth: "340px",
             marginTop: 36,
           }}>
             <h2 style={{
@@ -765,7 +936,7 @@ export default function MainPage() {
                       overflow: "hidden",
                     }}
                   >
-                    <Card card={card} />
+                    <Card card={extractCardData(card)} onSuggestedQuestionClick={handleSuggestedQuestionClick} />
                   </div>
                 ) : null
               ))
@@ -783,7 +954,6 @@ export default function MainPage() {
           </div>
         </div>
       </main>
-      {/* Slide Button (expand/collapse) */}
       {!sideFullScreen && (
         <button
           style={{
@@ -826,13 +996,12 @@ export default function MainPage() {
           </svg>
         </button>
       )}
-      {/* Side Section: General Talk */}
       <aside
         style={sidePanelStyle}
         tabIndex={!sideCollapsed ? 0 : -1}
         aria-hidden={sideCollapsed && !sideFullScreen}
       >
-        {!sideCollapsed && !sideFullScreen && (
+        {!sideFullScreen && !sideCollapsed && (
           <div
             style={{
               width: 6,
@@ -963,7 +1132,8 @@ export default function MainPage() {
                     >
                       {msg.user}
                     </div>
-                    {/* Each chunk is a separate answer bubble, always added below previous ones */}
+                    {/* Side logs display per message idx */}
+                    <LogsDisplay logs={sideLogs[idx]} />
                     {msg.chunks && msg.chunks.map((chunk, chunkIdx) => (
                       <div
                         key={chunkIdx}
@@ -982,12 +1152,26 @@ export default function MainPage() {
                           whiteSpace: "pre-line",
                           overflow: "hidden",
                           boxSizing: "border-box",
+                          display: "block"
                         }}
                       >
-                        <ReactMarkdown>{chunk}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            p: ({ node, ...props }) => <p {...props} style={{ margin: "0 0 10px 0", wordBreak: "break-word", overflowWrap: "break-word" }} />,
+                            ul: ({ node, ...props }) => <ul {...props} style={{ margin: "0 0 10px 1.2em", paddingLeft: "1.2em" }} />,
+                            ol: ({ node, ...props }) => <ol {...props} style={{ margin: "0 0 10px 1.2em", paddingLeft: "1.2em" }} />,
+                            li: ({ node, ...props }) => <li {...props} style={{ marginBottom: "0.2em", wordBreak: "break-word", overflowWrap: "break-word" }} />,
+                            a: ({ node, ...props }) => <a {...props} style={{ color: "#9BC53D", wordBreak: "break-all" }} target="_blank" rel="noopener noreferrer" />,
+                            table: ({ node, ...props }) => <table {...props} style={{ width: "100%", borderCollapse: "collapse", margin: "10px 0" }} />,
+                            th: ({ node, ...props }) => <th {...props} style={{ border: "1px solid #9BC53D", padding: "4px", background: "#2c3e50" }} />,
+                            td: ({ node, ...props }) => <td {...props} style={{ border: "1px solid #9BC53D", padding: "4px" }} />,
+                            code: ({ node, ...props }) => <code {...props} style={{ background: "#1e2b34", color: "#9BC53D", borderRadius: "4px", padding: "1px 4px" }} />
+                          }}
+                        >
+                          {chunk}
+                        </ReactMarkdown>
                       </div>
                     ))}
-                    {/* Typing chunk bubble */}
                     {sideTypingIdx === idx && sideTypingCurrentChunk && (
                       <div
                         style={{
@@ -1044,6 +1228,7 @@ export default function MainPage() {
               autoComplete="off"
             >
               <input
+                id="side-query-input"
                 style={{
                   border: "none",
                   background: inputBg,
@@ -1077,7 +1262,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 ..."/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
                 </svg>
               </button>
             </form>
@@ -1086,4 +1271,17 @@ export default function MainPage() {
       </aside>
     </div>
   );
+}
+
+// Helper for rendering sidebar responses (unchanged, but referenced above)
+function renderSidebarResponse(data) {
+  if (typeof data === "string") return data;
+  if (!data) return "";
+  if (typeof data === "object") {
+    if (data.text) return data.text;
+    if (data.final_response) return data.final_response;
+    if (Array.isArray(data.sub_answers)) return data.sub_answers.join("\n\n---\n\n");
+    return JSON.stringify(data, null, 2);
+  }
+  return String(data);
 }
