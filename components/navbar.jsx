@@ -166,7 +166,7 @@ export default function Navbar() {
 
               {/* Get Started Link */}
               <Link 
-                href="/home" 
+                href="/" 
                 className="font-medium transition-colors duration-200 hover:no-underline"
                 style={{ color: '#D9EAFD' }}
                 onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
