@@ -121,13 +121,14 @@ function extractCardData(card, email = null, productName = null, flag = true) {
 /**
  * Reads and parses SSE stream from response, calling callbacks on logs/result
  */
-async function readSSEStream(response, { onLogs, onResult }) {
+async function readSSEStreamRealtime(response, { onLogs, onResult }) {
   const decoder = new TextDecoder();
   let buffer = "";
   let done = false;
   let resultReceived = false;
+  const reader = response.body.getReader();
   while (!done) {
-    const { value, done: streamDone } = await response.body.getReader().read();
+    const { value, done: streamDone } = await reader.read();
     if (value) {
       buffer += decoder.decode(value, { stream: !streamDone });
       // Split by double newlines (SSE event delimiter)
@@ -454,11 +455,9 @@ export default function MainPage() {
           return;
         }
 
-        let logsArr = [];
-        await readSSEStream(response, {
+        await readSSEStreamRealtime(response, {
           onLogs: (log) => {
-            logsArr = [...logsArr, log];
-            setMainLogs([...logsArr]);
+            setMainLogs((prev) => [...prev, log]);
           },
           onResult: async (result) => {
             if (
@@ -528,11 +527,12 @@ export default function MainPage() {
         setSideInput("");
         return;
       }
-      let logsArr = [];
-      await readSSEStream(response, {
+      await readSSEStreamRealtime(response, {
         onLogs: (log) => {
-          logsArr = [...logsArr, log];
-          setSideLogs((prev) => ({ ...prev, [msgIdx]: [...logsArr] }));
+          setSideLogs((prev) => ({
+            ...prev,
+            [msgIdx]: [...(prev[msgIdx] || []), log],
+          }));
         },
         onResult: (data) => {
           if (data && data.result && (data.result.type === 2 || data.result.type === "2")) {
@@ -841,7 +841,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.88-.88z" />
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
               </svg>
             </button>
           </form>
@@ -1262,7 +1262,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.88-.88z" />
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.885-.885z"/>
                 </svg>
               </button>
             </form>
