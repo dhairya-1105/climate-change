@@ -150,99 +150,71 @@ export default function Navbar() {
         </Link>
 
         {/* Right Side Navigation */}
-        <div className="flex items-center space-x-4">
-          {/* Tutorial Link - Always visible */}
-          <Link 
-            href="/tutorial" 
-            className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline text-sm"
-            style={{ 
-              color: '#D9EAFD',
-              backgroundColor: '#3F72AF'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = '#6DA9E4';
-              e.target.style.color = '#112D4E';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = '#3F72AF';
-              e.target.style.color = '#D9EAFD';
-            }}
-          >
-            Tutorial
-          </Link>
-
+        <div className="flex items-center space-x-6">
           {isLoggedIn ? (
             <>
-              {/* Welcome Message */}
-              <span className="text-base font-medium hidden sm:inline" style={{ color: '#DBE2EF' }}>
-                Welcome, {username}
-              </span>
-              
               {/* Dashboard Link */}
               <Link 
                 href="/dashboard" 
-                className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline text-sm"
-                style={{ 
-                  color: '#D9EAFD',
-                  backgroundColor: '#3F72AF'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#6DA9E4';
-                  e.target.style.color = '#112D4E';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#3F72AF';
-                  e.target.style.color = '#D9EAFD';
-                }}
+                className="font-medium transition-colors duration-200 hover:no-underline"
+                style={{ color: '#D9EAFD' }}
+                onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+                onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
               >
                 Dashboard
+              </Link>
+
+              {/* Tutorial Link */}
+              <Link 
+                href="/tutorial" 
+                className="font-medium transition-colors duration-200 hover:no-underline"
+                style={{ color: '#D9EAFD' }}
+                onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+                onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
+              >
+                Tutorial
               </Link>
 
               {/* Logout Button */}
               <button
                 onClick={handleLogout}
-                className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:scale-105 text-sm"
+                className="font-medium transition-colors duration-200 cursor-pointer"
                 style={{ 
-                  backgroundColor: '#3F72AF',
                   color: '#D9EAFD',
-                  border: 'none'
+                  border: 'none',
+                  background: 'none',
+                  padding: 0
                 }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#6DA9E4';
-                  e.target.style.color = '#112D4E';
-                  e.target.style.boxShadow = '0 4px 12px rgba(109, 169, 228, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#3F72AF';
-                  e.target.style.color = '#D9EAFD';
-                  e.target.style.boxShadow = 'none';
-                }}
+                onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+                onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
               >
                 Logout
               </button>
             </>
           ) : (
-            /* Login Link */
-            <Link 
-              href="/login" 
-              className="px-3 py-1.5 rounded-md font-medium transition-all duration-200 hover:no-underline hover:scale-105 text-sm"
-              style={{ 
-                backgroundColor: '#3F72AF',
-                color: '#D9EAFD'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#6DA9E4';
-                e.target.style.color = '#112D4E';
-                e.target.style.boxShadow = '0 4px 12px rgba(109, 169, 228, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#3F72AF';
-                e.target.style.color = '#D9EAFD';
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              Login
-            </Link>
+            <>
+              {/* Tutorial Link - Always visible */}
+              <Link 
+                href="/tutorial"  
+                className="font-medium transition-colors duration-200 hover:no-underline"
+                style={{ color: '#D9EAFD' }}
+                onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+                onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
+              >
+                Tutorial
+              </Link>
+
+              {/* Login Link */}
+              <Link 
+                href="/login" 
+                className="font-medium transition-colors duration-200 hover:no-underline"
+                style={{ color: '#D9EAFD' }}
+                onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
+                onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
+              >
+                Login
+              </Link>
+            </>
           )}
         </div>
       </div>

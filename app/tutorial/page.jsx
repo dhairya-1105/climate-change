@@ -115,7 +115,7 @@ export default function TutorialPage() {
         </div>
 
         {/* Tutorial Section 2 */}
-        <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
+        <div className="grid md:grid-cols-2 gap-12 items-center mb-20">
           <div className="relative md:order-1">
             <div 
               className="rounded-2xl shadow-2xl overflow-hidden border-2 transform hover:scale-105 transition-transform duration-300"
@@ -146,19 +146,175 @@ export default function TutorialPage() {
               Step 2: Get Your Environmental Report
             </h2>
             <p className="text-lg leading-relaxed" style={{ color: '#112D4E' }}>
-              Receive a comprehensive sustainability grade based on carbon footprint, recyclability, 
+              Receive a comprehensive sustainability score from 0-100 based on carbon footprint, recyclability, 
               manufacturing impact, and lifecycle analysis. We don't just tell you what's wrong – 
               we provide actionable alternatives that are available in your local market, 
               making sustainable choices accessible and practical.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-lg border" style={{ backgroundColor: '#3F72AF', borderColor: '#6DA9E4' }}>
-                <div className="text-2xl font-bold mb-1" style={{ color: '#D9EAFD' }}>A-F</div>
-                <div className="text-sm" style={{ color: '#D9EAFD' }}>Sustainability Grade</div>
+                <div className="text-2xl font-bold mb-1" style={{ color: '#D9EAFD' }}>0-100</div>
+                <div className="text-sm" style={{ color: '#D9EAFD' }}>Sustainability Score</div>
               </div>
               <div className="p-4 rounded-lg border" style={{ backgroundColor: '#3F72AF', borderColor: '#6DA9E4' }}>
                 <div className="text-2xl font-bold mb-1" style={{ color: '#D9EAFD' }}>3+</div>
                 <div className="text-sm" style={{ color: '#D9EAFD' }}>Better Alternatives</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Section */}
+        <div className="grid md:grid-cols-2 gap-12 items-center mb-20">
+          <div className="space-y-6">
+            <h2 className="text-2xl md:text-3xl font-bold" style={{ color: '#3F72AF' }}>
+              Step 3: Track Your Progress
+            </h2>
+            <p className="text-lg leading-relaxed" style={{ color: '#112D4E' }}>
+              All your past product analyses are saved and displayed on your personal dashboard. 
+              Keep track of your sustainability journey, revisit previous recommendations, and monitor 
+              your environmental impact over time. Don't lose track of your eco-friendly discoveries – 
+              create an account to access your personalized dashboard!
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>View all your past product analyses</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>Track your sustainability improvements</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>Access saved alternative recommendations</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="relative">
+            <div 
+              className="rounded-2xl shadow-2xl overflow-hidden border-2 transform hover:scale-105 transition-transform duration-300"
+              style={{ 
+                backgroundColor: '#112D4E',
+                borderColor: '#3F72AF',
+                aspectRatio: '4/3'
+              }}
+            >
+              {/* Mock Dashboard Image */}
+              <div className="h-full p-6 flex flex-col">
+                {/* Dashboard Header */}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold" style={{ color: '#D9EAFD' }}>Your Dashboard</h3>
+                  <div className="w-8 h-8 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                </div>
+                
+                {/* Mock Analysis Cards */}
+                <div className="space-y-3 flex-1">
+                  <div className="p-3 rounded-lg border" style={{ backgroundColor: '#3F72AF', borderColor: '#6DA9E4' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium" style={{ color: '#D9EAFD' }}>iPhone 15 Pro</span>
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#6DA9E4', color: '#112D4E' }}>Score: 65</span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg border" style={{ backgroundColor: '#3F72AF', borderColor: '#6DA9E4' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium" style={{ color: '#D9EAFD' }}>Nike Air Max</span>
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#6DA9E4', color: '#112D4E' }}>Score: 42</span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg border" style={{ backgroundColor: '#3F72AF', borderColor: '#6DA9E4' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium" style={{ color: '#D9EAFD' }}>Dell Laptop</span>
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#6DA9E4', color: '#112D4E' }}>Score: 78</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center mt-4">
+                  <span className="text-xs" style={{ color: '#DBE2EF' }}>Login to save your analyses</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* General Talk Section */}
+        <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
+          <div className="relative md:order-1">
+            <div 
+              className="rounded-2xl shadow-2xl overflow-hidden border-2 transform hover:scale-105 transition-transform duration-300"
+              style={{ 
+                backgroundColor: '#3F72AF',
+                borderColor: '#6DA9E4',
+                aspectRatio: '4/3'
+              }}
+            >
+              <div className="h-full flex flex-col p-6">
+                {/* Chat Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold" style={{ color: '#D9EAFD' }}>General Talk</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#6DA9E4', color: '#112D4E' }}>
+                      Ctrl + Q
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Mock Chat Messages */}
+                <div className="space-y-3 flex-1">
+                  <div className="p-3 rounded-lg" style={{ backgroundColor: '#112D4E' }}>
+                    <p className="text-sm" style={{ color: '#D9EAFD' }}>
+                      What are the main causes of climate change?
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg ml-4" style={{ backgroundColor: '#6DA9E4' }}>
+                    <p className="text-sm" style={{ color: '#112D4E' }}>
+                      Climate change is primarily caused by greenhouse gas emissions from human activities...
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg" style={{ backgroundColor: '#112D4E' }}>
+                    <p className="text-sm" style={{ color: '#D9EAFD' }}>
+                      How can individuals make a difference?
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-2 rounded-lg border-2 border-dashed" style={{ borderColor: '#6DA9E4' }}>
+                  <p className="text-xs text-center" style={{ color: '#D9EAFD' }}>
+                    Ask me anything about climate change!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-6 md:order-2">
+            <h2 className="text-2xl md:text-3xl font-bold" style={{ color: '#3F72AF' }}>
+              Bonus: General Climate Chat
+            </h2>
+            <p className="text-lg leading-relaxed" style={{ color: '#112D4E' }}>
+              Have questions about climate change, sustainability practices, or environmental topics? 
+              Use our General Talk feature on the homepage by pressing Ctrl + Q. Get instant answers to your 
+              climate-related questions, learn about sustainable practices, and expand your environmental knowledge. 
+              It's like having an expert climate advisor available 24/7!
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>Press Ctrl + Q on homepage to open chat</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>Ask any climate or sustainability question</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6DA9E4' }}></div>
+                <span style={{ color: '#112D4E' }}>Get expert-level environmental insights</span>
               </div>
             </div>
           </div>
