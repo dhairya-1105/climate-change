@@ -164,15 +164,15 @@ export default function Navbar() {
                 Dashboard
               </Link>
 
-              {/* Tutorial Link */}
+              {/* Get Started Link */}
               <Link 
-                href="/tutorial" 
+                href="/home" 
                 className="font-medium transition-colors duration-200 hover:no-underline"
                 style={{ color: '#D9EAFD' }}
                 onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
                 onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
               >
-                Tutorial
+                Get Started
               </Link>
 
               {/* Logout Button */}
@@ -193,15 +193,15 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              {/* Tutorial Link - Always visible */}
+              {/* Get Started Link - Always visible */}
               <Link 
-                href="/tutorial"  
+                href="/home"  
                 className="font-medium transition-colors duration-200 hover:no-underline"
                 style={{ color: '#D9EAFD' }}
                 onMouseEnter={(e) => e.target.style.color = '#6DA9E4'}
                 onMouseLeave={(e) => e.target.style.color = '#D9EAFD'}
               >
-                Tutorial
+                Analyse
               </Link>
 
               {/* Login Link */}
