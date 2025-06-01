@@ -132,15 +132,13 @@ function extractCardData(card, email = null, productName = null, flag = true) {
 }
 
 /**
- * Reads and parses SSE stream from response, calling callbacks on logs/result.
- * If the SSE connection closes before a result or error is received,
- * calls onDone(true) to indicate abnormal end.
+ * Reads and parses SSE stream from response, calling callbacks on logs/result
  */
-async function readSSEStreamRealtime(response, { onLogs, onResult, onDone }) {
+async function readSSEStreamRealtime(response, { onLogs, onResult }) {
   const decoder = new TextDecoder();
   let buffer = "";
   let done = false;
-  let resultOrErrorReceived = false;
+  let resultReceived = false;
   const reader = response.body.getReader();
   while (!done) {
     const { value, done: streamDone } = await reader.read();
@@ -167,8 +165,18 @@ async function readSSEStreamRealtime(response, { onLogs, onResult, onDone }) {
             onLogs(dataStr);
           }
         }
-        if ((eventType === "result" || eventType === "error") && onResult) {
-          resultOrErrorReceived = true;
+        if (eventType === "result" && onResult) {
+          resultReceived = true;
+          let parsed;
+          try {
+            parsed = JSON.parse(dataStr);
+          } catch {
+            parsed = { error: "Parse error", raw: dataStr };
+          }
+          onResult(parsed);
+        }
+        if (eventType === "error" && onResult) {
+          resultReceived = true;
           let parsed;
           try {
             parsed = JSON.parse(dataStr);
@@ -180,12 +188,6 @@ async function readSSEStreamRealtime(response, { onLogs, onResult, onDone }) {
       }
     }
     if (streamDone) done = true;
-  }
-  // If the stream ended and no result or error was received, call onDone
-  if (!resultOrErrorReceived && typeof onDone === "function") {
-    onDone(true);
-  } else if (typeof onDone === "function") {
-    onDone(false);
   }
 }
 
@@ -218,7 +220,6 @@ export default function MainPage() {
   const [quoteFading, setQuoteFading] = useState(false);
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
-  const [mainSSEError, setMainSSEError] = useState(false);
 
   const [sideInput, setSideInput] = useState("");
   const [sideLoading, setSideLoading] = useState(false);
@@ -227,7 +228,6 @@ export default function MainPage() {
   const [sideTypingChunks, setSideTypingChunks] = useState([]);
   const [sideTypingCurrentChunk, setSideTypingCurrentChunk] = useState("");
   const [sideLogs, setSideLogs] = useState({}); // logs for each side message idx
-  const [sideSSEError, setSideSSEError] = useState({});
   const sidebarBottomRef = useRef(null);
 
   const [userEmail, setUserEmail] = useState(null);
@@ -444,7 +444,6 @@ export default function MainPage() {
     setQuoteFading(true);
     setContentSlideUp(false);
     setCardAppear(false);
-    setMainSSEError(false);
 
     setTimeout(async () => {
       try {
@@ -495,14 +494,6 @@ export default function MainPage() {
             setShowCard(true);
             setMainLoading(false);
             setInput("");
-          },
-          onDone: (abnormal) => {
-            if (abnormal && mainLoading) {
-              setMainSSEError(true);
-              setMainLoading(false);
-              setShowCard(true);
-              setMainCard({ error: "No response was received from the server. Please try again." });
-            }
           }
         });
       } catch (err) {
@@ -523,8 +514,6 @@ export default function MainPage() {
     setSideMessages((msgs) => [...msgs, { user: query, chunks: [] }]);
     const msgIdx = sideMessages.length;
     setSideLogs((prev) => ({ ...prev, [msgIdx]: [] }));
-    setSideSSEError((prev) => ({ ...prev, [msgIdx]: false }));
-
     try {
       const response = await fetch('/api/query', {
         method: "POST",
@@ -649,23 +638,6 @@ export default function MainPage() {
           }
           setSideLoading(false);
           setSideInput("");
-        },
-        onDone: (abnormal) => {
-          if (abnormal && sideLoading) {
-            setSideSSEError((prev) => ({ ...prev, [msgIdx]: true }));
-            setSideMessages((msgs) =>
-              msgs.map((msg, idx) =>
-                idx === msgIdx
-                  ? {
-                    ...msg,
-                    chunks: ["No response was received from the server. Please try again."],
-                  }
-                  : msg
-              )
-            );
-            setSideLoading(false);
-            setSideInput("");
-          }
         }
       });
     } catch (err) {
@@ -895,7 +867,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.867-.867z"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-..." />
               </svg>
             </button>
           </form>
@@ -1271,7 +1243,7 @@ export default function MainPage() {
                         <span className="blinking-cursor" style={{ color: "#9BC53D" }}>|</span>
                       </div>
                     )}
-                    {!msg.chunks?.length && sideTypingIdx !== idx && !sideLoading && !sideSSEError[idx] && (
+                    {!msg.chunks?.length && sideTypingIdx !== idx && !sideLoading && (
                       <div
                         style={{
                           fontSize: 15,
@@ -1337,7 +1309,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.867-.867z"/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 ..." />
                 </svg>
               </button>
             </form>
