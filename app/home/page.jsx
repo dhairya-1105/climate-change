@@ -118,13 +118,16 @@ function extractCardData(card, email = null, productName = null, flag = true) {
   return result;
 }
 
+// --- STREAM TIMEOUT CONFIG ---
+const STREAM_TIMEOUT_MS = 20000; // 20 sec, adjust as needed
+
 export default function MainPage() {
   const mainBg = "#D9EAFD";
   const cardBg = "#3F72AF";
   const cardAlt = "#3F72AF";
   const inputBg = "#DBE2EF";
   const textMain = "#112D4E";
-  const textSub = "#6DA9E4";
+  // const textSub = "#6DA9E4";
 
   const [showUnderline, setShowUnderline] = useState(false);
   useEffect(() => {
@@ -143,7 +146,7 @@ export default function MainPage() {
   const [mainCard, setMainCard] = useState(null);
   const [showCard, setShowCard] = useState(false);
   const [msgBoxLifted, setMsgBoxLifted] = useState(false);
-  const [quoteFading, setQuoteFading] = useState(false);
+  // const [quoteFading, setQuoteFading] = useState(false);
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
@@ -360,6 +363,63 @@ export default function MainPage() {
     }, 100);
   };
 
+  // --- Helper for streaming fetch with timeout and heartbeat ---
+  async function streamWithTimeout(url, fetchOptions, onEvent, onError, onDone) {
+    let timeoutId;
+    let aborted = false;
+
+    function resetTimeout() {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        aborted = true;
+        onError("Stream timed out (no data received). This may be a production deployment streaming limitation.");
+        if (controller) controller.abort();
+      }, STREAM_TIMEOUT_MS);
+    }
+
+    const controller = new AbortController();
+    fetchOptions = { ...fetchOptions, signal: controller.signal };
+
+    try {
+      const response = await fetch(url, fetchOptions);
+      if (!response.ok) {
+        onError(await response.text());
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      resetTimeout();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        resetTimeout();
+
+        let eventRe = /event: (logs|result|heartbeat)\ndata: (.+?)\n\n/g;
+        let match;
+        let lastIdx = 0;
+        while ((match = eventRe.exec(buffer))) {
+          lastIdx = eventRe.lastIndex;
+          const [_, eventType, dataStr] = match;
+          if (eventType === "heartbeat") {
+            // Ignore, just a keepalive
+            continue;
+          }
+          await onEvent(eventType, dataStr);
+        }
+        if (lastIdx > 0) buffer = buffer.slice(lastIdx);
+      }
+      clearTimeout(timeoutId);
+      if (!aborted) onDone();
+    } catch (err) {
+      if (!aborted) onError("Failed to fetch response. " + (err?.message || ""));
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   // Streamed API handler for side panel
   const handleSendSide = async (e, overrideInput = null) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
@@ -370,143 +430,126 @@ export default function MainPage() {
     const msgIdx = sideMessages.length;
     setSideLogs((prev) => ({ ...prev, [msgIdx]: "" }));
 
-    try {
-      const response = await fetch('/api/query', {
+    let gotResult = false;
+    await streamWithTimeout(
+      '/api/query',
+      {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: 2,
           prompt: query,
           latitude: location.latitude,
           longitude: location.longitude,
         }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
+        credentials: "include",
+      },
+      // onEvent
+      async (eventType, dataStr) => {
+        if (eventType === "logs") {
+          setSideLogs((prev) => ({
+            ...prev,
+            [msgIdx]: JSON.parse(dataStr)
+          }));
+        } else if (eventType === "result") {
+          gotResult = true;
+          let result;
+          try {
+            result = JSON.parse(dataStr);
+          } catch (e) {
+            result = { error: "Failed to parse result JSON", raw: dataStr };
+          }
+          // Animate chunks if result is array-like
+          if (result && (result.type === 2 || result.type === "2")) {
+            let allChunks = [];
+            if (Array.isArray(result.sub_answers)) allChunks = [...result.sub_answers];
+            if (result.final_response) allChunks.push(result.final_response);
+            let currentChunks = [];
+            let idx2 = 0;
+            function animateChunk() {
+              if (idx2 < allChunks.length) {
+                setSideTypingIdx(msgIdx);
+                setSideTypingChunks(currentChunks);
+                setSideTypingCurrentChunk("");
+                let full = allChunks[idx2];
+                let charIdx = 0;
+                function typeChar() {
+                  setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
+                  charIdx++;
+                  if (charIdx < full.length) {
+                    setTimeout(typeChar, 2);
+                  } else {
+                    currentChunks = [...currentChunks, full];
+                    setSideMessages((prev) =>
+                      prev.map((msg, mi) =>
+                        mi === msgIdx
+                          ? {
+                            ...msg,
+                            chunks: [...currentChunks],
+                          }
+                          : msg
+                      )
+                    );
+                    idx2++;
+                    setTimeout(animateChunk, 30);
+                  }
+                }
+                typeChar();
+              } else {
+                setSideTypingIdx(-1);
+                setSideTypingChunks([]);
+                setSideTypingCurrentChunk("");
+              }
+            }
+            animateChunk();
+          } else {
+            setSideMessages((msgs) =>
+              msgs.map((msg, idx) =>
+                idx === msgIdx
+                  ? {
+                    ...msg,
+                    chunks: [
+                      result
+                        ? renderSidebarResponse(result)
+                        : result.sub_answers
+                          ? renderSidebarResponse(result)
+                          : result.error || "No response.",
+                    ],
+                  }
+                  : msg
+              )
+            );
+          }
+        }
+      },
+      // onError
+      (err) => {
         setSideMessages((msgs) =>
           msgs.map((msg, idx) =>
             idx === msgIdx
-              ? { ...msg, chunks: [`FastAPI error: ${errorText}`] }
+              ? { ...msg, chunks: [`Error: ${err}`] }
               : msg
           )
         );
         setSideLogs((prev) => ({ ...prev, [msgIdx]: "" }));
-        return;
-      }
-
-      // Streamed event parser
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      setSideTypingIdx(msgIdx);
-      setSideTypingChunks([]);
-      setSideTypingCurrentChunk("");
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let eventRe = /event: (logs|result)\ndata: (.+?)\n\n/g;
-        let match;
-        let lastIdx = 0;
-        while ((match = eventRe.exec(buffer))) {
-          lastIdx = eventRe.lastIndex;
-          const [_, eventType, dataStr] = match;
-          if (eventType === "logs") {
-            setSideLogs((prev) => ({
-              ...prev,
-              [msgIdx]: JSON.parse(dataStr)
-            }));
-          } else if (eventType === "result") {
-            let result;
-            try {
-              result = JSON.parse(dataStr);
-            } catch (e) {
-              result = { error: "Failed to parse result JSON", raw: dataStr };
-            }
-            // Animate chunks if result is array-like
-            if (result && (result.type === 2 || result.type === "2")) {
-              let allChunks = [];
-              if (Array.isArray(result.sub_answers)) allChunks = [...result.sub_answers];
-              if (result.final_response) allChunks.push(result.final_response);
-              let currentChunks = [];
-              let idx2 = 0;
-              function animateChunk() {
-                if (idx2 < allChunks.length) {
-                  setSideTypingIdx(msgIdx);
-                  setSideTypingChunks(currentChunks);
-                  setSideTypingCurrentChunk("");
-                  let full = allChunks[idx2];
-                  let charIdx = 0;
-                  function typeChar() {
-                    setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
-                    charIdx++;
-                    if (charIdx < full.length) {
-                      setTimeout(typeChar, 2);
-                    } else {
-                      currentChunks = [...currentChunks, full];
-                      setSideMessages((prev) =>
-                        prev.map((msg, mi) =>
-                          mi === msgIdx
-                            ? {
-                              ...msg,
-                              chunks: [...currentChunks],
-                            }
-                            : msg
-                        )
-                      );
-                      idx2++;
-                      setTimeout(animateChunk, 30);
-                    }
-                  }
-                  typeChar();
-                } else {
-                  setSideTypingIdx(-1);
-                  setSideTypingChunks([]);
-                  setSideTypingCurrentChunk("");
-                }
-              }
-              animateChunk();
-            } else {
-              setSideMessages((msgs) =>
-                msgs.map((msg, idx) =>
-                  idx === msgIdx
-                    ? {
-                      ...msg,
-                      chunks: [
-                        result
-                          ? renderSidebarResponse(result)
-                          : result.sub_answers
-                            ? renderSidebarResponse(result)
-                            : result.error || "No response.",
-                      ],
-                    }
-                    : msg
-                )
-              );
-            }
-          }
+        setSideLoading(false);
+        setSideInput("");
+      },
+      // onDone
+      () => {
+        setSideLoading(false);
+        setSideInput("");
+        if (!gotResult) {
+          setSideMessages((msgs) =>
+            msgs.map((msg, idx) =>
+              idx === msgIdx
+                ? { ...msg, chunks: ["Stream ended before final result was received. This may be a serverless streaming limitation."] }
+                : msg
+            )
+          );
         }
-        if (lastIdx > 0) buffer = buffer.slice(lastIdx);
       }
-    } catch (err) {
-      setSideMessages((msgs) =>
-        msgs.map((msg, idx) =>
-          idx === msgIdx
-            ? { ...msg, chunks: ["Failed to fetch response."] }
-            : msg
-        )
-      );
-      setSideLogs((prev) => ({ ...prev, [msgIdx]: "" }));
-    } finally {
-      setSideLoading(false);
-      setSideInput("");
-    }
+    );
   };
 
   // Streamed API handler for main message box
@@ -517,95 +560,80 @@ export default function MainPage() {
     setMainCard(null);
     setShowCard(false);
     setMsgBoxLifted(true);
-    setQuoteFading(true);
+    // setQuoteFading(true);
     setContentSlideUp(false);
     setCardAppear(false);
     setMainLogs(""); // clear logs
 
     setTimeout(async () => {
-      try {
-        const response = await fetch('/api/query', {
+      let gotResult = false;
+      await streamWithTimeout(
+        '/api/query',
+        {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: 1,
             prompt: input,
             latitude: location.latitude,
             longitude: location.longitude,
           }),
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          setMainCard({ error: `FastAPI error: ${errorText}` });
+          credentials: "include",
+        },
+        // onEvent
+        async (eventType, dataStr) => {
+          if (eventType === "logs") {
+            setMainLogs(JSON.parse(dataStr));
+          } else if (eventType === "result") {
+            gotResult = true;
+            let result;
+            try {
+              result = JSON.parse(dataStr);
+            } catch (e) {
+              result = { error: "Failed to parse result JSON", raw: dataStr };
+            }
+            if (
+              result &&
+              typeof result === "object" &&
+              userEmail
+            ) {
+              const cardForDb = extractCardData({ result: result }, userEmail, input, false);
+              fetch("/api/createCard", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cardForDb),
+              })
+                .then((resp) => resp.ok ? resp.json() : null)
+                .then((savedCard) => {
+                  if (savedCard) {
+                    setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
+                  }
+                })
+                .catch(() => { });
+            }
+            setMainCard({ result: result });
+            setShowCard(true);
+          }
+        },
+        // onError
+        (err) => {
+          setMainCard({ error: "Error: " + err });
           setShowCard(true);
+          setMainLogs("");
           setMainLoading(false);
           setInput("");
-          setMainLogs("");
-          return;
-        }
-
-        // Streamed event parser for main logs/result
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        setMainLogs("");
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let eventRe = /event: (logs|result)\ndata: (.+?)\n\n/g;
-          let match;
-          let lastIdx = 0;
-          while ((match = eventRe.exec(buffer))) {
-            lastIdx = eventRe.lastIndex;
-            const [_, eventType, dataStr] = match;
-            if (eventType === "logs") {
-              setMainLogs(JSON.parse(dataStr));
-            } else if (eventType === "result") {
-              let result;
-              try {
-                result = JSON.parse(dataStr);
-              } catch (e) {
-                result = { error: "Failed to parse result JSON", raw: dataStr };
-              }
-              if (
-                result &&
-                typeof result === "object" &&
-                userEmail
-              ) {
-                const cardForDb = extractCardData({ result: result }, userEmail, input, false);
-                fetch("/api/createCard", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(cardForDb),
-                })
-                  .then((resp) => resp.ok ? resp.json() : null)
-                  .then((savedCard) => {
-                    if (savedCard) {
-                      setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
-                    }
-                  })
-                  .catch(() => { });
-              }
-              setMainCard({ result: result });
-              setShowCard(true);
-            }
+        },
+        // onDone
+        () => {
+          setMainLoading(false);
+          setInput("");
+          if (!gotResult) {
+            setMainCard({ error: "Stream ended before final result was received. This may be a serverless streaming limitation." });
+            setShowCard(true);
+            setMainLogs("");
           }
-          if (lastIdx > 0) buffer = buffer.slice(lastIdx);
         }
-      } catch (err) {
-        setMainCard({ error: "Failed to fetch response." });
-        setShowCard(true);
-        setMainLogs("");
-      } finally {
-        setMainLoading(false);
-        setInput("");
-      }
+      );
     }, 400);
   };
 
@@ -801,7 +829,7 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.857-.857l2.937-7.222-3.883 6.624a.65.65 0 0 1-.827.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.852-.852z"/>
               </svg>
             </button>
           </form>
@@ -1259,7 +1287,7 @@ export default function MainPage() {
                 tabIndex={0}
               >
                 <svg height={22} width={22} viewBox="0 0 20 20" fill={sideInput.trim() ? "#9BC53D" : "#b0b8c1"}>
-                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.857-.857l2.937-7.222-3.883 6.624a.65.65 0 0 1-.827.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z"/>
+                  <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.852-.852z"/>
                 </svg>
               </button>
             </form>

@@ -51,6 +51,12 @@ export default async function handler(req, res) {
             Connection: "keep-alive",
         });
 
+        // Support res.flush for streaming (required by Node.js HTTP API, often present in Express, sometimes in Vercel serverless)
+        if (typeof res.flush !== "function") {
+            // Add a no-op if not present (won't help in all platforms, but avoids crash)
+            res.flush = () => {};
+        }
+
         const decoder = new TextDecoder();
         const reader = response.body.getReader();
 
@@ -58,6 +64,16 @@ export default async function handler(req, res) {
         let resultBuffer = "";
         let inResult = false;
         const sep = "===RESULT===";
+
+        // Heartbeat logic to keep connection alive in serverless
+        let heartbeatInterval = setInterval(() => {
+            try {
+                res.write(`event: heartbeat\ndata: {}\n\n`);
+                res.flush();
+            } catch (e) {
+                clearInterval(heartbeatInterval);
+            }
+        }, 5000);
 
         async function stream() {
             while (true) {
@@ -76,8 +92,8 @@ export default async function handler(req, res) {
                             // Emit any remaining logs by line
                             logsPart.split(/\r?\n/).forEach((line) => {
                                 if (line.trim()) {
-                                    console.log(JSON.stringify(line));
                                     res.write(`event: logs\ndata: ${JSON.stringify(line)}\n\n`);
+                                    res.flush();
                                 }
                             });
                             resultBuffer = logBuffer.slice(sepIdx + sep.length);
@@ -90,8 +106,8 @@ export default async function handler(req, res) {
                             logBuffer = lines.pop();
                             lines.forEach((line) => {
                                 if (line.trim()) {
-                                    console.log(JSON.stringify(line));
                                     res.write(`event: logs\ndata: ${JSON.stringify(line)}\n\n`);
+                                    res.flush();
                                 }
                             });
                         }
@@ -104,6 +120,7 @@ export default async function handler(req, res) {
                     // Flush remaining logs (before sep) if any
                     if (!inResult && logBuffer.trim()) {
                         res.write(`event: logs\ndata: ${JSON.stringify(logBuffer.trim())}\n\n`);
+                        res.flush();
                     }
                     // Emit result if found
                     if (inResult) {
@@ -118,20 +135,21 @@ export default async function handler(req, res) {
                                 result = { error: "Failed to parse result JSON", raw: resultPart };
                             }
                         }
-                        console.log(JSON.stringify(result));
                         res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
+                        res.flush();
                     } else {
                         // No result found
                         res.write(`event: error\ndata: ${JSON.stringify({ error: "No result separator found" })}\n\n`);
+                        res.flush();
                     }
                     res.end();
+                    clearInterval(heartbeatInterval);
                     break;
                 }
             }
         }
         await stream();
     } catch (err) {
-        console.error(err);
         if (!res.headersSent) {
             res.status(500).json({ error: err.toString() });
         }
