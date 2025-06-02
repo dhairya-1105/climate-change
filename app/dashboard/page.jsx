@@ -80,7 +80,7 @@ export default function DashboardPage() {
   };
 
   const handleNewAnalysis = () => {
-    router.push("/");
+    router.push("/home");
   };
 
   const handleLogout = async () => {
