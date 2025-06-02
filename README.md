@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+#  EcoLens
 
-## Getting Started
+**IBM Call for Code 2025 Submission**
 
-First, run the development server:
+🔗 [Live Demo](https://climate-change-silk.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📌 Overview
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+**EcoLens** is an AI-powered web application that helps users understand the environmental impact of their consumption habits — starting with something as simple as a chocolate bar.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Whether it’s carbon emissions, water usage, recyclability, or ethical sourcing, **EcoLens** zooms in on the lifecycle of products and services, giving users personalized and location-aware insights to make more sustainable choices.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+##  Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+-  **AI-Driven Product Impact Analysis**  
+  Understand the carbon, water, and ethical footprint of your queries in seconds.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+-  **Location-Aware Insights**  
+  Use your latitude and longitude to tailor responses to your region or country.
 
-## Deploy on Vercel
+-  **Agentic RAG Pipeline**  
+  Multi-step retrieval-augmented generation using LangGraph and GPT.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+-  **Trusted Sources**  
+  Pulls from OpenLCA, Ecoinvent, IPCC, UNEP, and other climate databases.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+-  **Structured Output**  
+  Easily digestible JSON-based summaries with citations and actionable recommendations.
+
+---
+
+##  Tech Stack
+
+| Layer        | Tools Used                                      |
+|--------------|--------------------------------------------------|
+| Frontend     | Next.js, Tailwind CSS, React                    |
+| Backend      | LangGraph, IBM Watsonx.ai, Express              |
+| AI Models    | meta-llama/llama-3-405b-instruct                |
+| Retrieval    | FAISS, Tavily Web Search                        |
+| Data Sources | Ecoinvent, OpenLCA, IPCC, OpenFoodFacts, UNEP   |
+| Deployment   | Vercel                                          |
+
+---
+
+##  Architecture
+
+EcoLens uses a **Hierarchical Agentic RAG System**:
+
+1. **Query Decomposition**  
+   Complex user prompts are broken down into sub-questions.
+
+2. **CRAG Loop**  
+   Each sub-question invokes a retrieval-grade-generate pipeline.
+
+3. **Conditional Web Search**  
+   Web search is only triggered if retrieved documents are insufficient.
+
+4. **Consolidation**  
+   All sub-answers are merged using a JSON-constrained final generation step.
+
+5. **Location Integration**  
+   Optional lat/long values personalize responses for regional relevance.
+
