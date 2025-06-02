@@ -1,67 +1,135 @@
-# Running the Climate Change Script Locally with Docker
+# EcoLens
 
-This guide will help you build and run the climate change script locally using Docker. By following these steps, you can easily set up a containerized environment for development or testing, without needing to install dependencies directly on your machine.
+**IBM Call for Code 2025 Submission**
 
-## Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) installed on your system.
-
-## Steps to Run Locally
-
-1. **Clone the Repository**
-
-   If you haven't already, clone the repository to your local machine:
-
-   ```bash
-   git clone https://github.com/BHK4321/climate-change.git
-   cd climate-change/script
-   ```
-
-2. **Build the Docker Image**
-
-   Build the Docker image using the following command:
-
-   ```bash
-   docker build -t climate-change-script .
-   ```
-
-3. **Run the Docker Container**
-
-   Run the container, mapping port `8000` on your host to port `8000` in the container:
-
-   ```bash
-   docker run -p 8000:8000 climate-change-script
-   ```
-
-4. **Access the Application**
-
-   Once the container is running, the application will be accessible at:
-
-   ```
-   http://localhost:8000
-   ```
-
-## Stopping the Container
-
-To stop the running container, press `Ctrl+C` in the terminal where it's running, or use `docker ps` to find the container ID and stop it:
-
-```bash
-docker ps
-docker stop <container_id>
-```
-
-## Troubleshooting
-
-- **Port Already in Use:**  
-  If you get an error that port `8000` is already in use, either stop the process using that port or change the mapping (e.g., `-p 8080:8000`).
-- **Docker Not Installed:**  
-  Ensure Docker is installed and running by executing `docker --version`.
-
-## Additional Notes
-
-- Make sure to update the Dockerfile if there are changes to dependencies or application code.
-- You can pass environment variables or mount volumes as needed by extending the `docker run` command.
+🔗 [Live Demo](https://climate-change-silk.vercel.app)
 
 ---
 
-For more information, refer to the [official Docker documentation](https://docs.docker.com/get-started/).
+## 📌 Overview
+
+**EcoLens** is an AI-powered web application that helps users understand the environmental impact of their consumption habits — starting with something as simple as a chocolate bar.
+
+Whether it’s carbon emissions, water usage, recyclability, or ethical sourcing, **EcoLens** zooms in on the lifecycle of products and services, giving users personalized and location-aware insights to make more sustainable choices.
+
+---
+
+## Features
+
+-  **AI-Driven Product Impact Analysis**  
+  Understand the carbon, water, and ethical footprint of your queries in seconds.
+
+-  **Location-Aware Insights**  
+  Use your latitude and longitude to tailor responses to your region or country.
+
+-  **Agentic RAG Pipeline**  
+  Multi-step retrieval-augmented generation using LangGraph and GPT.
+
+-  **Trusted Sources**  
+  Pulls from OpenLCA, Ecoinvent, IPCC, UNEP, and other climate databases.
+
+-  **Structured Output**  
+  Easily digestible JSON-based summaries with citations and actionable recommendations.
+
+---
+
+##  Tech Stack
+
+| Layer        | Tools Used                                      |
+|--------------|--------------------------------------------------|
+| Frontend     | Next.js, Tailwind CSS, React                    |
+| Backend      | LangGraph, IBM Watsonx.ai, Express              |
+| AI Models    | meta-llama/llama-3-405b-instruct                |
+| Retrieval    | FAISS, Tavily Web Search                        |
+| Data Sources | Ecoinvent, OpenLCA, IPCC, OpenFoodFacts, UNEP   |
+| Deployment   | Vercel                                          |
+
+---
+
+##  Architecture
+
+EcoLens uses a **Hierarchical Agentic RAG System**:
+
+1. **Query Decomposition**  
+   Complex user prompts are broken down into sub-questions.
+
+2. **CRAG Loop**  
+   Each sub-question invokes a retrieval-grade-generate pipeline.
+
+3. **Conditional Web Search**  
+   Web search is only triggered if retrieved documents are insufficient.
+
+4. **Consolidation**  
+   All sub-answers are merged using a JSON-constrained final generation step.
+
+5. **Location Integration**  
+   Optional lat/long values personalize responses for regional relevance.
+
+   ##  Diagrams
+
+   ### CRAG Pipeline
+
+   ![CRAG Pipeline Diagram](../assets/crag.png)
+
+   ### Nested CRAG Example
+
+   ![Nested CRAG Example](../assets/nested_crag.png)
+
+## Folder Structure
+
+```plaintext
+climate-change/
+├── app/                 # Next.js routing and layouts
+├── components/          # Reusable UI components
+├── lib/                 # Utility functions and RAG logic
+├── models/              # LangGraph state definitions
+├── pages/               # Frontend pages
+├── public/              # Static assets
+├── scripts/             # Setup and initialization scripts
+├── .env.local           # API keys and environment variables
+├── package.json         # Dependencies and scripts
+├── README.md            # This file
+```
+
+## Getting Started
+
+### Prerequisites
+
+- **Node.js** (v16 or higher)
+- **npm** or **yarn**
+- **Tavily Web Search Tool API Key**
+- **IBM Watsonx.ai API Key** for enterprise-grade models
+
+### Installation
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/BHK4321/climate-change.git
+cd climate-change
+npm install
+```
+
+### Environment Variables
+
+Create a .env.local file in the root directory and add:
+
+```bash
+TAVILY_API_KEY=your-tavily-api-key
+IBM_API_KEY=your-ibm-api-key  
+IBM_PROJECT_ID=your-ibm-project-id
+```
+
+### Running Locally
+
+To start the development server:
+
+```bash
+npm run dev
+```
+
+Open your browser and go to:
+
+```bash
+http://localhost:3000
+```
