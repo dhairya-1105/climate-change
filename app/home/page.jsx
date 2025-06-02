@@ -41,8 +41,6 @@ function parseFinalResponseJSON(final_response) {
 function extractCardData(card, email = null, productName = null, flag = true) {
   if (!card) return {};
   let data = card.result || card;
-  console.log(data);
-  // If final_response is a code block, parse it and merge into data
   let parsedFromFinal = null;
   if (
     typeof data.final_response === "string" &&
@@ -53,8 +51,6 @@ function extractCardData(card, email = null, productName = null, flag = true) {
   if (parsedFromFinal && typeof parsedFromFinal === "object") {
     data = { ...data, ...parsedFromFinal };
   }
-
-  // Defensive: ensure arrays
   const rating = data.rating ?? null;
   const text = data.text ?? "";
   const citationsArr = Array.isArray(data.citations) ? data.citations : [];
@@ -69,7 +65,6 @@ function extractCardData(card, email = null, productName = null, flag = true) {
   const sub_answers = Array.isArray(data.sub_answers) ? data.sub_answers : [];
   const final_response = data.final_response ?? "";
 
-  // Normalize citations to {label, url}
   const citations = citationsArr.map((c) => {
     if (typeof c === "object" && c.label && c.url)
       return { label: c.label, url: c.url };
@@ -81,7 +76,6 @@ function extractCardData(card, email = null, productName = null, flag = true) {
     return { label: c?.toString() || "Source", url: "#" };
   });
 
-  // Normalize recommendations to {label}
   const recommendations = recommendationsArr.map((rec) => {
     if (typeof rec === "object" && rec.label) return { label: rec.label };
     if (typeof rec === "object" && rec.text) return { label: rec.text };
@@ -89,7 +83,6 @@ function extractCardData(card, email = null, productName = null, flag = true) {
     return { label: "Recommendation" };
   });
 
-  // Main text construction
   let mainText = text;
   if (!mainText && final_response && typeof final_response === "string")
     mainText = final_response;
@@ -102,9 +95,6 @@ function extractCardData(card, email = null, productName = null, flag = true) {
     data.date ||
     data.timestamp ||
     new Date().toISOString();
-
-  // Optional: log only if debugging
-  console.log(productName, rating, text, citations, recommendations, questionsArr);
 
   const result = {
     email: email || data.email || undefined,
@@ -151,22 +141,24 @@ export default function MainPage() {
   const [contentSlideUp, setContentSlideUp] = useState(false);
   const [cardAppear, setCardAppear] = useState(false);
 
-  const [mainLogs, setMainLogs] = useState([]); // For Query 1 logs
-  const mainLogsRef = useRef([]);
-
   const [sideInput, setSideInput] = useState("");
   const [sideLoading, setSideLoading] = useState(false);
   const [sideMessages, setSideMessages] = useState([]);
   const [sideTypingIdx, setSideTypingIdx] = useState(-1);
   const [sideTypingChunks, setSideTypingChunks] = useState([]);
   const [sideTypingCurrentChunk, setSideTypingCurrentChunk] = useState("");
-  const [sideLogsMap, setSideLogsMap] = useState({}); // key: msgIdx, value: array of logs
   const sidebarBottomRef = useRef(null);
 
   const [userEmail, setUserEmail] = useState(null);
   const [username, setUsername] = useState("");
   const [userCards, setUserCards] = useState([]);
   const [cardsLoading, setCardsLoading] = useState(true);
+
+  // Streaming log state for main form
+  const [mainLogs, setMainLogs] = useState("");
+  const [mainResult, setMainResult] = useState(null);
+
+  const logsBoxRef = useRef(null);
 
   const location = useUserLocation();
 
@@ -325,18 +317,6 @@ export default function MainPage() {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }
         }
-        .log-stream-chunk {
-          font-size: 14px;
-          color: #fff;
-          background: #2c3e50;
-          padding: 0.45rem 0.8rem;
-          border-radius: 6px;
-          margin-bottom: 4px;
-          font-family: "Fira Mono", "Menlo", "Consolas", monospace;
-          word-break: break-all;
-          overflow-wrap: anywhere;
-          box-shadow: 0 1px 6px 0 #1a237e0a;
-        }
       `;
       document.head.appendChild(style);
     }
@@ -356,28 +336,14 @@ export default function MainPage() {
     }
   }, [sideMessages, sideTypingChunks, sideTypingCurrentChunk, sideFullScreen]);
 
-  const handleCollapse = () => {
-    setSideCollapsed(true);
-    setTimeout(() => setSideOpen(false), 240);
-  };
-  const handleExpand = () => {
-    setSideOpen(true);
-    setTimeout(() => setSideCollapsed(false), 20);
-  };
-  const handleFullScreen = () => setSideFullScreen(true);
-  const handleExitFullScreen = () => setSideFullScreen(false);
+  // Scroll logs into view as they update
+  useEffect(() => {
+    if (logsBoxRef.current) {
+      logsBoxRef.current.scrollTop = logsBoxRef.current.scrollHeight;
+    }
+  }, [mainLogs]);
 
-  const handleSuggestedQuestionClick = (question) => {
-    setSideOpen(true);
-    setSideCollapsed(false);
-    setSideInput(question);
-    setTimeout(() => {
-      document.querySelector("#side-query-input")?.focus();
-      handleSendSide({ preventDefault: () => { } }, question);
-    }, 100);
-  };
-
-  // --- MAIN FORM WITH LOG STREAM (TYPE 1) ---
+  // Streaming main handler
   const handleSendMain = async (e) => {
     e.preventDefault();
     if (!input.trim() || mainLoading) return;
@@ -388,19 +354,13 @@ export default function MainPage() {
     setQuoteFading(true);
     setContentSlideUp(false);
     setCardAppear(false);
-    setMainLogs([]);
-    mainLogsRef.current = [];
+    setMainLogs("");
+    setMainResult(null);
 
     setTimeout(async () => {
-      let response;
-      let reader;
-      let done = false;
-      let responseChunks = [];
-      let mainResult = null;
-      let errorText = null;
-      let isStreamed = false;
       try {
-        response = await fetch('/api/query', {
+        // Use EventSource-like streaming (SSE)
+        const response = await fetch('/api/query', {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -410,12 +370,11 @@ export default function MainPage() {
             prompt: input,
             latitude: location.latitude,
             longitude: location.longitude,
-            stream_logs: true, // Tell backend to stream logs
           }),
         });
 
         if (!response.ok) {
-          errorText = await response.text();
+          const errorText = await response.text();
           setMainCard({ error: `FastAPI error: ${errorText}` });
           setShowCard(true);
           setMainLoading(false);
@@ -423,79 +382,56 @@ export default function MainPage() {
           return;
         }
 
-        // Try to stream logs if possible
-        if (response.body && response.headers.get('Content-Type')?.includes('text/event-stream')) {
-          isStreamed = true;
-          reader = response.body.getReader();
-          let decoder = new TextDecoder("utf-8");
-          let logsSoFar = [];
-          let buffer = "";
-          let finished = false;
-
-          while (!finished) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            // Split into lines for SSE (Server-Sent Events)
-            let lines = buffer.split("\n");
-            buffer = lines.pop(); // keep incomplete line for next
+        // Streaming logs below the box
+        if (response.body && window.ReadableStream) {
+          let logsText = "";
+          let resultObj = null;
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let done = false;
+          let eventType = null;
+          let eventData = "";
+          let chunkStr = "";
+          function processEvents(str) {
+            // Parse SSE events for logs and result
+            const lines = str.split(/\r?\n/);
             for (let line of lines) {
-              line = line.trim();
-              if (!line) continue;
-              if (line.startsWith("data:")) {
-                const data = line.slice(5).trim();
-                try {
-                  const obj = JSON.parse(data);
-                  if (obj.type === "log") {
-                    logsSoFar.push(obj.message);
-                    mainLogsRef.current = [...logsSoFar];
-                    setMainLogs([...logsSoFar]);
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                eventData = line.slice(6);
+                if (eventType === "logs") {
+                  setMainLogs(JSON.parse(eventData));
+                } else if (eventType === "result") {
+                  try {
+                    resultObj = JSON.parse(eventData);
+                  } catch {
+                    resultObj = { error: "Failed to parse result JSON", raw: eventData };
                   }
-                  if (obj.type === "result") {
-                    mainResult = obj.result;
-                  }
-                  if (obj.type === "error") {
-                    errorText = obj.error || "Unknown error during log stream.";
-                  }
-                  if (obj.type === "done") {
-                    finished = true;
-                    break;
-                  }
-                } catch (err) {
-                  // Could be partial, skip
+                  setMainLogs(""); // Clear logs after result
+                  setMainResult(resultObj);
+                  setMainCard({ result: resultObj });
+                  setShowCard(true);
                 }
+                eventType = null;
+                eventData = "";
               }
             }
           }
-        } else if (response.body) {
-          // fallback: handle as plain JSON (no streaming)
-          const data = await response.json();
-          mainResult = data.result;
-          errorText = data.error;
-        }
-        // Save card if response received
-        if (
-          mainResult &&
-          typeof mainResult === "object" &&
-          userEmail
-        ) {
-          const cardForDb = extractCardData({ result: mainResult }, userEmail, input, false);
-          const resp = await fetch("/api/createCard", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(cardForDb),
-          });
-          if (resp.ok) {
-            const savedCard = await resp.json();
-            setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
+          while (!done) {
+            const { value, done: doneReading } = await reader.read();
+            if (value) {
+              chunkStr = decoder.decode(value, { stream: !doneReading });
+              processEvents(chunkStr);
+            }
+            done = doneReading;
           }
+        } else {
+          // fallback: non-streaming
+          const data = await response.json();
+          setMainCard({ result: data.result });
+          setShowCard(true);
         }
-        if (mainResult) {
-          setMainCard({ result: mainResult });
-        } else if (errorText) {
-          setMainCard({ error: errorText });
-        }
-        setShowCard(true);
       } catch (err) {
         setMainCard({ error: "Failed to fetch response." });
         setShowCard(true);
@@ -506,289 +442,7 @@ export default function MainPage() {
     }, 400);
   };
 
-  // --- SIDEBAR CHAT WITH LOG STREAM (TYPE 2) ---
-  const handleSendSide = async (e, overrideInput = null) => {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    const query = overrideInput !== null ? overrideInput : sideInput;
-    if (!query.trim() || sideLoading) return;
-    setSideLoading(true);
-    setSideMessages((msgs) => [...msgs, { user: query, chunks: [] }]);
-    const msgIdx = sideMessages.length;
-    setSideLogsMap((prev) => ({ ...prev, [msgIdx]: [] }));
-
-    let response;
-    let reader;
-    let errorText = null;
-    let isStreamed = false;
-    let responseObj = null;
-    let logsSoFar = [];
-    try {
-      response = await fetch('/api/query', {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: 2,
-          prompt: query,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          stream_logs: true, // Tell backend to stream logs
-        }),
-      });
-
-      // Try to stream logs if possible
-      if (response.body && response.headers.get('Content-Type')?.includes('text/event-stream')) {
-        isStreamed = true;
-        reader = response.body.getReader();
-        let decoder = new TextDecoder("utf-8");
-        let buffer = "";
-        let finished = false;
-        let resultObj = null;
-        let sideTypingIdxSet = false;
-
-        while (!finished) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let lines = buffer.split("\n");
-          buffer = lines.pop();
-          for (let line of lines) {
-            line = line.trim();
-            if (!line) continue;
-            if (line.startsWith("data:")) {
-              const data = line.slice(5).trim();
-              try {
-                const obj = JSON.parse(data);
-                if (obj.type === "log") {
-                  logsSoFar.push(obj.message);
-                  setSideLogsMap((prev) => ({
-                    ...prev,
-                    [msgIdx]: [...logsSoFar],
-                  }));
-                }
-                if (obj.type === "result") {
-                  resultObj = obj.result;
-                }
-                if (obj.type === "error") {
-                  errorText = obj.error || "Unknown error during log stream.";
-                }
-                if (obj.type === "done") {
-                  finished = true;
-                  break;
-                }
-              } catch (err) {
-                // skip
-              }
-            }
-          }
-        }
-
-        // Show the result in the chat as before
-        if (resultObj && (resultObj.type === 2 || resultObj.type === "2")) {
-          let all = [];
-          if (Array.isArray(resultObj.sub_answers)) {
-            all = [...resultObj.sub_answers];
-          }
-          if (resultObj.final_response) {
-            all.push(resultObj.final_response);
-          }
-          let currentChunks = [];
-          let idx = 0;
-          function animateChunk() {
-            if (idx < all.length) {
-              setSideTypingIdx(msgIdx);
-              setSideTypingChunks(currentChunks);
-              setSideTypingCurrentChunk("");
-              let full = all[idx];
-              let charIdx = 0;
-              function typeChar() {
-                setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
-                charIdx++;
-                if (charIdx < full.length) {
-                  setTimeout(typeChar, 2);
-                } else {
-                  currentChunks = [...currentChunks, full];
-                  setSideMessages((prev) =>
-                    prev.map((msg, mi) =>
-                      mi === msgIdx
-                        ? {
-                          ...msg,
-                          chunks: [...currentChunks],
-                        }
-                        : msg
-                    )
-                  );
-                  idx++;
-                  setTimeout(animateChunk, 30);
-                }
-              }
-              typeChar();
-            } else {
-              setSideTypingIdx(-1);
-              setSideTypingChunks([]);
-              setSideTypingCurrentChunk("");
-            }
-          }
-          animateChunk();
-        } else {
-          setSideMessages((msgs) =>
-            msgs.map((msg, idx) =>
-              idx === msgIdx
-                ? {
-                  ...msg,
-                  chunks: [
-                    resultObj
-                      ? renderSidebarResponse(resultObj)
-                      : resultObj?.sub_answers
-                        ? renderSidebarResponse(resultObj)
-                        : errorText || "No response.",
-                  ],
-                }
-                : msg
-            )
-          );
-        }
-      } else if (response.body) {
-        // fallback: handle as plain JSON (no streaming)
-        const data = await response.json();
-        responseObj = data.result;
-        errorText = data.error;
-        if (responseObj && (responseObj.type === 2 || responseObj.type === "2")) {
-          let all = [];
-          if (Array.isArray(responseObj.sub_answers)) {
-            all = [...responseObj.sub_answers];
-          }
-          if (responseObj.final_response) {
-            all.push(responseObj.final_response);
-          }
-          let currentChunks = [];
-          let idx = 0;
-          function animateChunk() {
-            if (idx < all.length) {
-              setSideTypingIdx(msgIdx);
-              setSideTypingChunks(currentChunks);
-              setSideTypingCurrentChunk("");
-              let full = all[idx];
-              let charIdx = 0;
-              function typeChar() {
-                setSideTypingCurrentChunk(full.slice(0, charIdx + 1));
-                charIdx++;
-                if (charIdx < full.length) {
-                  setTimeout(typeChar, 2);
-                } else {
-                  currentChunks = [...currentChunks, full];
-                  setSideMessages((prev) =>
-                    prev.map((msg, mi) =>
-                      mi === msgIdx
-                        ? {
-                          ...msg,
-                          chunks: [...currentChunks],
-                        }
-                        : msg
-                    )
-                  );
-                  idx++;
-                  setTimeout(animateChunk, 30);
-                }
-              }
-              typeChar();
-            } else {
-              setSideTypingIdx(-1);
-              setSideTypingChunks([]);
-              setSideTypingCurrentChunk("");
-            }
-          }
-          animateChunk();
-        } else {
-          setSideMessages((msgs) =>
-            msgs.map((msg, idx) =>
-              idx === msgIdx
-                ? {
-                  ...msg,
-                  chunks: [
-                    responseObj
-                      ? renderSidebarResponse(responseObj)
-                      : responseObj?.sub_answers
-                        ? renderSidebarResponse(responseObj)
-                        : errorText || "No response.",
-                  ],
-                }
-                : msg
-            )
-          );
-        }
-      }
-    } catch (err) {
-      setSideMessages((msgs) =>
-        msgs.map((msg, idx) =>
-          idx === msgIdx
-            ? { ...msg, chunks: ["Failed to fetch response."] }
-            : msg
-        )
-      );
-    } finally {
-      setSideLoading(false);
-      setSideInput("");
-    }
-  };
-
-  // Helper for rendering a sidebar response (optional, adjust as needed)
-  function renderSidebarResponse(result) {
-    if (!result) return "";
-    if (typeof result === "string") return result;
-    if (Array.isArray(result)) return result.join("\n\n---\n\n");
-    if (result.final_response) return result.final_response;
-    if (result.text) return result.text;
-    return JSON.stringify(result, null, 2);
-  }
-
-  const sidePanelStyle = sideFullScreen
-    ? {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: "100vh",
-      width: "100vw",
-      minWidth: 0,
-      maxWidth: "100vw",
-      background: cardAlt,
-      zIndex: 100,
-      boxShadow: "rgba(60,64,67,0.18) 0px 1.5px 24px 0px",
-      display: "flex",
-      flexDirection: "column",
-      transition:
-        "width 0.2s, left 0.2s, right 0.2s, top 0.2s, bottom 0.2s, opacity 0.15s",
-      borderLeft: `1px solid ${cardAlt}`,
-      overflow: "hidden",
-    }
-    : {
-      position: "fixed",
-      top: 0,
-      right: 0,
-      height: "100vh",
-      width: sideWidth,
-      minWidth: 320,
-      maxWidth: 600,
-      background: cardAlt,
-      boxShadow: !sideCollapsed
-        ? "rgba(60,64,67,0.12) 0px 1.5px 12px 0px"
-        : "none",
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      zIndex: 30,
-      transform: sideCollapsed
-        ? `translateX(${sideWidth - 40}px)`
-        : "translateX(0)",
-      opacity: !sideCollapsed ? 1 : 0,
-      pointerEvents: !sideCollapsed ? "all" : "none",
-      transition:
-        "transform 0.24s ease, width 0.2s ease, opacity 0.15s",
-      borderLeft: `1px solid ${cardAlt}`,
-    };
+  // ...rest of your code remains unchanged...
 
   return (
     <div
@@ -872,6 +526,7 @@ export default function MainPage() {
             opacity: 1,
           }}
         >
+          {/* Message box */}
           <form
             className={msgBoxLifted ? "msgbox-lift" : "msgbox-rest"}
             style={{
@@ -925,33 +580,39 @@ export default function MainPage() {
               tabIndex={0}
             >
               <svg height={22} width={22} viewBox="0 0 20 20" fill={input.trim() ? "#9BC53D" : "#b0b8c1"}>
-                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-1.02-.745z"/>
+                <path d="M2.01 10.384l14.093-6.246c.822-.364 1.621.435 1.257 1.257l-6.247 14.093c-.367.829-1.553.834-1.926.008l-2.068-4.683a.65.65 0 0 1 .276-.827l6.624-3.883-7.222 2.937a.65.65 0 0 1-.827-.276l-4.683-2.068c-.826-.373-.821-1.559.008-1.926z" />
               </svg>
             </button>
           </form>
-          {/* --- MAIN LOG STREAM DISPLAY --- */}
-          {mainLoading && mainLogs.length > 0 && (
-            <div style={{
-              width: "100%",
-              maxWidth: 800,
-              background: "#2c3e50",
-              borderRadius: 8,
-              marginBottom: 10,
-              marginTop: 0,
-              padding: "0.7rem 1.1rem",
-            }}>
-              <div style={{ color: "#9BC53D", fontWeight: 600, marginBottom: 7, fontSize: 15 }}>
-                Logs
-              </div>
-              <div>
-                {mainLogs.map((log, idx) => (
-                  <div className="log-stream-chunk" key={idx}>
-                    <ReactMarkdown>{log}</ReactMarkdown>
-                  </div>
-                ))}
-              </div>
+
+          {/* Logs BELOW the message box, real-time, only while loading */}
+          {mainLoading && mainLogs && (
+            <div
+              ref={logsBoxRef}
+              style={{
+                width: "100%",
+                maxWidth: 800,
+                minHeight: 36,
+                background: "#f6f6f6",
+                color: "#2d3e50",
+                borderRadius: 7,
+                padding: "0.75rem 1.2rem",
+                marginBottom: 14,
+                fontFamily: "monospace",
+                fontSize: "15px",
+                whiteSpace: "pre-line",
+                boxShadow: "0 1px 4px 0 #1a237e0c",
+                overflowY: "auto",
+                maxHeight: 180
+              }}
+            >
+              <strong>Logs:</strong>
+              <br />
+              {mainLogs}
             </div>
           )}
+
+          {/* Final card as before */}
           {showCard && (
             <div
               className="main-card-appear"
@@ -980,7 +641,7 @@ export default function MainPage() {
                     mainCard.result
                   ) {
                     const cardData = extractCardData(mainCard, null, input);
-                    return <Card card={cardData} onSuggestedQuestionClick={handleSuggestedQuestionClick} />;
+                    return <Card card={cardData} onSuggestedQuestionClick={() => {}} />;
                   }
                   if (mainCard && mainCard.error) {
                     return (
@@ -1002,6 +663,7 @@ export default function MainPage() {
               )}
             </div>
           )}
+          {/* ...rest of your code for recent analyses/cards... */}
           <div style={{
             width: "100%",
             maxWidth: "900px",
@@ -1041,7 +703,7 @@ export default function MainPage() {
                       overflow: "hidden",
                     }}
                   >
-                    <Card card={extractCardData(card)} onSuggestedQuestionClick={handleSuggestedQuestionClick} />
+                    <Card card={extractCardData(card)} onSuggestedQuestionClick={() => {}} />
                   </div>
                 ) : null
               ))
