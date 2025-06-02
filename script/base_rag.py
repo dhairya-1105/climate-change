@@ -371,12 +371,13 @@ json_structure_prompt = PromptTemplate(
 IMPORTANT :: Everything MUST be in Markdown format:
 You are an assistant formatting environmental impact assessments.
 Given the following unstructured answer, return a JSON object with the following fields:
+
 {{
   "rating": Number (0-100, representing your rating as an environmental expert, of the impacts of using that product based on the unstructured answer),
   "text": String (comprehensive answer addressing environmental impacts including carbon footprint, water usage, waste generation, etc.),
-  "citations": [{{[unicef study](https://www.unicef.org/environment-and-climate-change)}}] (list of source URLs that support your answer, minimum 1 source),
-  "recommendations": [{{"text": String}}] (2-3 actionable suggestions for reducing environmental impact),
-  "suggestedQuestions": [String] (3-4 related follow-up questions users might want to ask)
+  "citations": [ {{"label": String, "url": String}} ] (list of source objects with label and URL that support your answer, minimum 1 source),
+  "recommendations": [ {{"text": String}} ] (2-3 actionable suggestions for reducing environmental impact),
+  "suggestedQuestions": [ String ] (3-4 related follow-up questions users might want to ask)
 }}
 
 Include all the information provided in the unstructured answer.
