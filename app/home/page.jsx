@@ -477,7 +477,7 @@ export default function MainPage() {
                 setUserCards((prev) => [savedCard, ...prev].slice(0, 3));
               }
             }
-            setMainCard(result);
+            setMainCard({result:result.result});
             setShowCard(true);
             setMainLoading(false);
             setInput("");
