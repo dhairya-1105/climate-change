@@ -77,9 +77,6 @@ EcoLens uses a **Hierarchical Agentic RAG System**:
 
 # Pipeline for Streaming Logs and Responses in EcoLens (climate-change)
 
-> **Note:**  
-> Search result responses are limited to 10 results. This explanation is based on the most relevant files found. For more, [view code search results on GitHub](https://github.com/BHK4321/climate-change/search?q=stream+pipeline+log+response).
-
 ---
 
 ## 🗺️ Overview
