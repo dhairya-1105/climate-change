@@ -82,8 +82,8 @@ Given the following context and user question, answer in context of these parame
 
   "rating": Number (0-100, representing your rating as an environmental expert, of the impacts of using that product),
   "text": String (comprehensive answer addressing environmental impacts including carbon footprint, water usage, waste generation, etc.),
-  "citations": [[unicef study](https://www.unicef.org/environment-and-climate-change)] (list of source URLs that support your answer, minimum 1 source),
-  "recommendations": ["text": String] (2-3 actionable suggestions for reducing environmental impact),
+  "citations": [{{"label": String, "url": String}}] (list of source URLs that support your answer, minimum 1 source),
+  "recommendations": [{{"text": String}}] (2-3 actionable suggestions for reducing environmental impact),
   "suggestedQuestions": [String] (3-4 related follow-up questions users might want to ask)
 
 IMPORTANT::
@@ -368,7 +368,6 @@ CRAG_graph = CRAG.compile()
 json_structure_prompt = PromptTemplate(
     template="""
 <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-IMPORTANT :: Everything MUST be in Markdown format:
 You are an assistant formatting environmental impact assessments.
 Given the following unstructured answer, return a JSON object with the following fields:
 

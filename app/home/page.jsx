@@ -60,7 +60,7 @@ function extractCardData(card, email = null, productName = null, flag = true) {
   if (parsedFromFinal && typeof parsedFromFinal === "object") {
     data = { ...data, ...parsedFromFinal };
   }
-
+  
   // Defensive: ensure arrays
   const rating = data.rating ?? null;
   const text = data.text ?? "";
@@ -87,7 +87,7 @@ function extractCardData(card, email = null, productName = null, flag = true) {
       return { label: "Source", url: c };
     return { label: c?.toString() || "Source", url: "#" };
   });
-
+  console.log(citations);
   // Normalize recommendations to {label}
   const recommendations = recommendationsArr.map((rec) => {
     if (typeof rec === "object" && rec.label) return { label: rec.label };
