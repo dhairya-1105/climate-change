@@ -38,7 +38,7 @@ Whether it’s carbon emissions, water usage, recyclability, or ethical sourcing
 | Layer        | Tools Used                                      |
 |--------------|--------------------------------------------------|
 | Frontend     | Next.js, Tailwind CSS, React                    |
-| Backend      | LangGraph, IBM Watsonx.ai, Express              |
+| Backend      | LangGraph, IBM Watsonx.ai, Next.js api routing               |
 | AI Models    | meta-llama/llama-3-405b-instruct                |
 | Retrieval    | FAISS, Tavily Web Search                        |
 | Data Sources | Ecoinvent, OpenLCA, IPCC, OpenFoodFacts, UNEP   |
@@ -75,61 +75,59 @@ EcoLens uses a **Hierarchical Agentic RAG System**:
 
    ![Nested CRAG Example](../assets/nested_crag.png)
 
-## Folder Structure
+## Running Locally with Docker
 
-```plaintext
-climate-change/
-├── app/                 # Next.js routing and layouts
-├── components/          # Reusable UI components
-├── lib/                 # Utility functions and RAG logic
-├── models/              # LangGraph state definitions
-├── pages/               # Frontend pages
-├── public/              # Static assets
-├── scripts/             # Setup and initialization scripts
-├── .env.local           # API keys and environment variables
-├── package.json         # Dependencies and scripts
-├── README.md            # This file
-```
+To run the project locally using Docker, follow these steps:
 
-## Getting Started
+1. **Ensure Docker is Installed**
+   
+   Make sure you have [Docker](https://www.docker.com/get-started) installed on your machine. You can verify the installation by running:
+   ```sh
+   docker --version
+   ```
 
-### Prerequisites
+2. **Clone the Repository**
+   
+   If you haven't already, clone the repository:
+   ```sh
+   git clone https://github.com/BHK4321/climate-change.git
+   cd climate-change
+   ```
 
-- **Node.js** (v16 or higher)
-- **npm** or **yarn**
-- **Tavily Web Search Tool API Key**
-- **IBM Watsonx.ai API Key** for enterprise-grade models
+3. **Navigate to the Project Directory**
+   
+   Change to the `script` directory if applicable:
+   ```sh
+   cd script
+   ```
 
-### Installation
+4. **Build the Docker Image**
+   
+   Build the Docker image using the provided `Dockerfile`:
+   ```sh
+   docker build -t climate-change-app .
+   ```
 
-Clone the repository and install dependencies:
+5. **Run the Docker Container**
+   
+   Start a container from the built image:
+   ```sh
+   docker run --rm -it climate-change-app
+   ```
 
-```bash
-git clone https://github.com/BHK4321/climate-change.git
-cd climate-change
-npm install
-```
+   - If you need to map ports or mount volumes, add the appropriate flags, for example:
+     ```sh
+     docker run --rm -it -p 8080:8080 -v $(pwd):/app climate-change-app
+     ```
 
-### Environment Variables
+6. **Access the Application**
+   
+   - Follow any additional instructions printed by the container for accessing the application (such as URLs or credentials).
+   - If the application exposes a web server, open your browser and go to [http://localhost:8080](http://localhost:8080) (replace with the correct port if different).
 
-Create a .env.local file in the root directory and add:
+---
 
-```bash
-TAVILY_API_KEY=your-tavily-api-key
-IBM_API_KEY=your-ibm-api-key  
-IBM_PROJECT_ID=your-ibm-project-id
-```
+**Note:**  
+Adjust the Docker commands as needed for your specific project setup. If there are environment variables, configuration files, or data directories required, ensure they are properly configured or mounted.
 
-### Running Locally
-
-To start the development server:
-
-```bash
-npm run dev
-```
-
-Open your browser and go to:
-
-```bash
-http://localhost:3000
-```
+For troubleshooting or advanced options, refer to the [Docker documentation](https://docs.docker.com/).
