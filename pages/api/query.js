@@ -92,6 +92,7 @@ export default async function handler(req, res) {
                             // Emit any remaining logs by line
                             logsPart.split(/\r?\n/).forEach((line) => {
                                 if (line.trim()) {
+                                    console.log(JSON.stringify(line));
                                     res.write(`event: logs\ndata: ${JSON.stringify(line)}\n\n`);
                                     res.flush();
                                 }
@@ -106,6 +107,7 @@ export default async function handler(req, res) {
                             logBuffer = lines.pop();
                             lines.forEach((line) => {
                                 if (line.trim()) {
+                                    console.log(JSON.stringify(line));
                                     res.write(`event: logs\ndata: ${JSON.stringify(line)}\n\n`);
                                     res.flush();
                                 }
@@ -119,6 +121,7 @@ export default async function handler(req, res) {
                 if (done) {
                     // Flush remaining logs (before sep) if any
                     if (!inResult && logBuffer.trim()) {
+                          console.log("log",JSON.stringify(logBuffer.trim()));
                         res.write(`event: logs\ndata: ${JSON.stringify(logBuffer.trim())}\n\n`);
                         res.flush();
                     }
@@ -135,6 +138,7 @@ export default async function handler(req, res) {
                                 result = { error: "Failed to parse result JSON", raw: resultPart };
                             }
                         }
+                        console.log("result",JSON.stringify(result));
                         res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
                         res.flush();
                     } else {

@@ -119,7 +119,7 @@ function extractCardData(card, email = null, productName = null, flag = true) {
 }
 
 // --- STREAM TIMEOUT CONFIG ---
-const STREAM_TIMEOUT_MS = 20000; // 20 sec, adjust as needed
+const STREAM_TIMEOUT_MS = 200000; // 20 sec, adjust as needed
 
 export default function MainPage() {
   const mainBg = "#D9EAFD";
@@ -597,7 +597,8 @@ export default function MainPage() {
               typeof result === "object" &&
               userEmail
             ) {
-              const cardForDb = extractCardData({ result: result }, userEmail, input, false);
+              console.log(result);
+              const cardForDb = extractCardData({ result: result.result }, userEmail, input, false);
               fetch("/api/createCard", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -611,7 +612,7 @@ export default function MainPage() {
                 })
                 .catch(() => { });
             }
-            setMainCard({ result: result });
+            setMainCard(result);
             setShowCard(true);
           }
         },
@@ -849,7 +850,7 @@ export default function MainPage() {
               whiteSpace: "pre-wrap",
               boxShadow: "0 1px 3px 0 #1a237e09"
             }}>
-              <strong>Logs:</strong>
+              <strong>Processing...</strong>
               <div style={{ marginTop: 3 }}>
                 {mainLogs ? mainLogs : <em>Waiting for logs...</em>}
               </div>
@@ -1153,7 +1154,7 @@ export default function MainPage() {
                         whiteSpace: "pre-wrap",
                         boxShadow: "0 1px 3px 0 #1a237e09"
                       }}>
-                        <strong>Logs:</strong>
+                        <strong>Processing..</strong>
                         <div style={{ marginTop: 3 }}>
                           {sideLogs[idx] ? sideLogs[idx] : <em>Waiting for logs...</em>}
                         </div>

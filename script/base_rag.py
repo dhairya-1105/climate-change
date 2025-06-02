@@ -114,9 +114,8 @@ The role of human activities or industries in shaping the issue.
 Possible solutions or innovations addressing the problem.
 Any notable controversies, trade-offs, or debates surrounding it.
 
-Give links wherever you could of trusted sources in markdown format only : [unicef study](https://www.unicef.org/environment-and-climate-change)
 --------------------------------------------------------------------------------------
-IMPORTANT ::: EVERYTHING MUST BE IN MARKDOWN FORMAT. CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
+IMPORTANT ::: CONSIDER THE USER'S LOCATION, GIVEN BY LATITUDE AND LONGITUDE, WHILE ANSWERING
 DO NOT ANSWER EMPTY QUESTIONS OR NOTES.
 Context: {documents}
 Question: {question}
@@ -384,7 +383,7 @@ Include all the information provided in the unstructured answer.
 Tips for each field:
 - rating: Consider data quality, source reliability, and how complete the information is
 - text: Structure the answer logically, use specific numbers/metrics when available
-- citations: Always link to authoritative sources like environmental databases or research papers, use normal text where URLs/links are not available, IMPORTANT :: GIVE IN MARKDOWN FORMAT ONLY (Example : An array of these: [unicef study](https://www.unicef.org/environment-and-climate-change))
+- citations: Always link to authoritative sources like environmental databases or research papers, use normal text where URLs/links are not available
 - recommendations: Focus on practical, achievable actions for consumers
 - suggestedQuestions: Questions should explore related environmental aspects not covered in main answer
 
